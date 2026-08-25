@@ -74,6 +74,9 @@ data/raw/
 
 # Processed datasets
 data/processed/
+!data/processed/forecasting/
+!data/processed/forecasting/business_insights/
+!data/processed/forecasting/business_insights/phase8/
 
 # Forecasting backup data
 data/processed/forecasting_backup_before_final_changes/
@@ -84,6 +87,7 @@ data/processed/forecasting_backup_before_final_changes/
 # requirements.txt and project documentation remain tracked.
 # Large CSV/data files are intentionally excluded.
 # ------------------------------------------------------------
+
 # ------------------------------------------------------------
 # Local / generated files
 # ------------------------------------------------------------
@@ -105,5 +109,6 @@ data/processed/forecasting_backup_before_final_changes/
 # ------------------------------------------------------------
 
 .streamlit/secrets.toml
+
 # Source code backup
 src_backup_before_final_changes/
