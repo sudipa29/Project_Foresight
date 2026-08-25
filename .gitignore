@@ -69,14 +69,11 @@ desktop.ini
 # Large datasets
 # ------------------------------------------------------------
 
-# Raw datasets
-data/raw/
-
-# Processed datasets
-data/processed/
-!data/processed/forecasting/
-!data/processed/forecasting/business_insights/
-!data/processed/forecasting/business_insights/phase8/
+# Ignore dataset contents while allowing folder placeholders.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
 
 # Forecasting backup data
 data/processed/forecasting_backup_before_final_changes/
