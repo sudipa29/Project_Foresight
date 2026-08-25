@@ -1,0 +1,936 @@
+# ============================================================
+# PROJECT FORESIGHT
+# PHASE 6.3 - STORE-SKU DEMAND REGIME CLASSIFICATION
+# ============================================================
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+
+# ============================================================
+# PATHS
+# ============================================================
+
+BASE_PATH = Path(
+    r"E:\Zidio_Development_Internship\Project_Foresight"
+)
+
+DATA_PATH = (
+    BASE_PATH
+    / "data"
+    / "processed"
+    / "forecasting"
+)
+
+HISTORICAL_FILE = (
+    DATA_PATH
+    / "forecast_demand_daily.csv"
+)
+
+FUTURE_PATH = (
+    DATA_PATH
+    / "future"
+)
+
+INTERMITTENT_PATH = (
+    FUTURE_PATH
+    / "intermittent_corrected"
+)
+
+VALIDATION_PATH = (
+    FUTURE_PATH
+    / "validation"
+)
+
+VALIDATION_PATH.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+
+# ============================================================
+# OUTPUT FILE
+# ============================================================
+
+REGIME_FILE = (
+    VALIDATION_PATH
+    / "store_sku_demand_regimes.csv"
+)
+
+REGIME_SUMMARY_FILE = (
+    VALIDATION_PATH
+    / "demand_regime_summary.csv"
+)
+
+CALIBRATION_INPUT_FILE = (
+    VALIDATION_PATH
+    / "forecast_calibration_input.csv"
+)
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+print("=" * 70)
+print("PROJECT FORESIGHT")
+print("PHASE 6.3 - STORE-SKU DEMAND REGIME CLASSIFICATION")
+print("=" * 70)
+
+
+# ============================================================
+# LOAD HISTORICAL DATA
+# ============================================================
+
+print()
+print("=" * 70)
+print("LOADING HISTORICAL DEMAND")
+print("=" * 70)
+
+historical = pd.read_csv(
+    HISTORICAL_FILE,
+    usecols=[
+        "store_id",
+        "sku_id",
+        "date",
+        "units_sold"
+    ],
+    dtype={
+        "store_id": "int16",
+        "sku_id": "int16",
+        "date": "string",
+        "units_sold": "float32"
+    }
+)
+
+historical["date"] = pd.to_datetime(
+    historical["date"]
+)
+
+max_date = historical["date"].max()
+
+print(
+    "Historical rows:",
+    len(historical)
+)
+
+print(
+    "Latest historical date:",
+    max_date.date()
+)
+
+
+# ============================================================
+# CREATE DATE WINDOWS
+# ============================================================
+
+start_30 = (
+    max_date
+    - pd.Timedelta(days=29)
+)
+
+start_60 = (
+    max_date
+    - pd.Timedelta(days=59)
+)
+
+start_90 = (
+    max_date
+    - pd.Timedelta(days=89)
+)
+
+
+# ============================================================
+# CREATE STORE-SKU BASE
+# ============================================================
+
+print()
+print("=" * 70)
+print("CREATING STORE-SKU DEMAND FEATURES")
+print("=" * 70)
+
+
+base = (
+    historical[
+        [
+            "store_id",
+            "sku_id"
+        ]
+    ]
+    .drop_duplicates()
+)
+
+
+# ============================================================
+# 30-DAY FEATURES
+# ============================================================
+
+print(
+    "Calculating 30-day demand..."
+)
+
+h30 = historical[
+    historical["date"] >= start_30
+]
+
+
+d30 = (
+    h30
+    .groupby(
+        [
+            "store_id",
+            "sku_id"
+        ],
+        as_index=False
+    )
+    .agg(
+        demand_30d=(
+            "units_sold",
+            "sum"
+        ),
+
+        active_days_30d=(
+            "units_sold",
+            lambda x: (x > 0).sum()
+        )
+    )
+)
+
+
+# ============================================================
+# 60-DAY FEATURES
+# ============================================================
+
+print(
+    "Calculating 60-day demand..."
+)
+
+h60 = historical[
+    historical["date"] >= start_60
+]
+
+
+d60 = (
+    h60
+    .groupby(
+        [
+            "store_id",
+            "sku_id"
+        ],
+        as_index=False
+    )
+    .agg(
+        demand_60d=(
+            "units_sold",
+            "sum"
+        ),
+
+        active_days_60d=(
+            "units_sold",
+            lambda x: (x > 0).sum()
+        )
+    )
+)
+
+
+# ============================================================
+# 90-DAY FEATURES
+# ============================================================
+
+print(
+    "Calculating 90-day demand..."
+)
+
+h90 = historical[
+    historical["date"] >= start_90
+]
+
+
+d90 = (
+    h90
+    .groupby(
+        [
+            "store_id",
+            "sku_id"
+        ],
+        as_index=False
+    )
+    .agg(
+        demand_90d=(
+            "units_sold",
+            "sum"
+        ),
+
+        active_days_90d=(
+            "units_sold",
+            lambda x: (x > 0).sum()
+        )
+    )
+)
+
+
+# ============================================================
+# DAYS SINCE LAST DEMAND
+# ============================================================
+
+print(
+    "Calculating days since last demand..."
+)
+
+
+positive = historical[
+    historical["units_sold"] > 0
+]
+
+
+last_demand = (
+    positive
+    .groupby(
+        [
+            "store_id",
+            "sku_id"
+        ],
+        as_index=False
+    )["date"]
+    .max()
+    .rename(
+        columns={
+            "date":
+                "last_demand_date"
+        }
+    )
+)
+
+
+# ============================================================
+# MERGE FEATURES
+# ============================================================
+
+features = (
+    base
+    .merge(
+        d30,
+        on=[
+            "store_id",
+            "sku_id"
+        ],
+        how="left"
+    )
+    .merge(
+        d60,
+        on=[
+            "store_id",
+            "sku_id"
+        ],
+        how="left"
+    )
+    .merge(
+        d90,
+        on=[
+            "store_id",
+            "sku_id"
+        ],
+        how="left"
+    )
+    .merge(
+        last_demand,
+        on=[
+            "store_id",
+            "sku_id"
+        ],
+        how="left"
+    )
+)
+
+
+# ============================================================
+# FILL MISSING VALUES
+# ============================================================
+
+numeric_columns = [
+    "demand_30d",
+    "active_days_30d",
+    "demand_60d",
+    "active_days_60d",
+    "demand_90d",
+    "active_days_90d"
+]
+
+
+features[numeric_columns] = (
+    features[numeric_columns]
+    .fillna(0)
+)
+
+
+# ============================================================
+# DAYS SINCE LAST DEMAND
+# ============================================================
+
+features[
+    "days_since_last_demand"
+] = (
+    max_date
+    - features["last_demand_date"]
+).dt.days
+
+
+features[
+    "days_since_last_demand"
+] = (
+    features[
+        "days_since_last_demand"
+    ]
+    .fillna(9999)
+)
+
+
+# ============================================================
+# DEMAND FREQUENCY
+# ============================================================
+
+features[
+    "demand_frequency_30d"
+] = (
+    features["active_days_30d"]
+    / 30
+)
+
+
+features[
+    "demand_frequency_90d"
+] = (
+    features["active_days_90d"]
+    / 90
+)
+
+
+# ============================================================
+# POSITIVE DEMAND QUANTITY
+# ============================================================
+
+features[
+    "avg_positive_demand_90d"
+] = np.where(
+    features["active_days_90d"] > 0,
+
+    features["demand_90d"]
+    /
+    features["active_days_90d"],
+
+    0
+)
+
+
+# ============================================================
+# DEMAND TREND
+# ============================================================
+
+features[
+    "recent_vs_long_term"
+] = np.where(
+    features["demand_90d"] > 0,
+
+    (
+        features["demand_30d"]
+        /
+        (features["demand_90d"] / 3)
+    ),
+
+    0
+)
+
+
+# ============================================================
+# DEMAND REGIME
+# ============================================================
+
+print()
+print(
+    "Classifying demand regimes..."
+)
+
+
+conditions = [
+
+    features["demand_30d"] > 0,
+
+    (
+        (features["demand_30d"] == 0)
+        &
+        (features["demand_90d"] > 0)
+    ),
+
+    features["demand_90d"] == 0
+]
+
+
+choices = [
+    "ACTIVE",
+    "INTERMITTENT",
+    "DORMANT"
+]
+
+
+features[
+    "demand_regime"
+] = np.select(
+    conditions,
+    choices,
+    default="CHECK"
+)
+
+
+# ============================================================
+# ACTIVITY LEVEL
+# ============================================================
+
+features[
+    "activity_level"
+] = np.select(
+
+    [
+        features["active_days_30d"] >= 10,
+
+        features["active_days_30d"] >= 5,
+
+        features["active_days_30d"] >= 1,
+
+        features["active_days_90d"] > 0
+    ],
+
+    [
+        "HIGH_ACTIVITY",
+
+        "MEDIUM_ACTIVITY",
+
+        "LOW_ACTIVITY",
+
+        "INTERMITTENT_ACTIVITY"
+    ],
+
+    default="DORMANT"
+)
+
+
+# ============================================================
+# LOAD INTERMITTENT FORECAST
+# ============================================================
+
+print()
+print(
+    "Loading intermittent 30-day forecast..."
+)
+
+
+forecast_file = (
+    INTERMITTENT_PATH
+    / "intermittent_future_30_day_forecast.csv"
+)
+
+
+forecast = pd.read_csv(
+    forecast_file,
+    usecols=[
+        "store_id",
+        "sku_id",
+        "forecast_units"
+    ]
+)
+
+
+forecast_30 = (
+    forecast
+    .groupby(
+        [
+            "store_id",
+            "sku_id"
+        ],
+        as_index=False
+    )["forecast_units"]
+    .sum()
+    .rename(
+        columns={
+            "forecast_units":
+                "intermittent_forecast_30d"
+        }
+    )
+)
+
+
+# ============================================================
+# MERGE FORECAST
+# ============================================================
+
+features = (
+    features
+    .merge(
+        forecast_30,
+        on=[
+            "store_id",
+            "sku_id"
+        ],
+        how="left"
+    )
+)
+
+
+features[
+    "intermittent_forecast_30d"
+] = (
+    features[
+        "intermittent_forecast_30d"
+    ]
+    .fillna(0)
+)
+
+
+# ============================================================
+# FORECAST / HISTORICAL RATIO
+# ============================================================
+
+features[
+    "forecast_vs_recent_ratio"
+] = np.where(
+
+    features["demand_30d"] > 0,
+
+    features["intermittent_forecast_30d"]
+    /
+    features["demand_30d"],
+
+    np.nan
+)
+
+
+# ============================================================
+# DORMANCY FLAG
+# ============================================================
+
+features[
+    "dormant_90d"
+] = (
+    features["demand_90d"] == 0
+)
+
+
+# ============================================================
+# SLOW-MOVING FLAG
+# ============================================================
+
+features[
+    "slow_moving"
+] = (
+
+    (
+        features["demand_30d"] <= 2
+    )
+
+    &
+
+    (
+        features["demand_90d"] > 0
+    )
+
+)
+
+
+# ============================================================
+# HIGH-DEMAND FLAG
+# ============================================================
+
+high_threshold = (
+    features["demand_30d"]
+    .quantile(0.90)
+)
+
+
+features[
+    "high_demand"
+] = (
+    features["demand_30d"]
+    >= high_threshold
+)
+
+
+print()
+print(
+    "High-demand threshold:",
+    high_threshold
+)
+
+
+# ============================================================
+# FINAL COLUMN ORDER
+# ============================================================
+
+columns = [
+
+    "store_id",
+    "sku_id",
+
+    "demand_30d",
+    "active_days_30d",
+    "demand_frequency_30d",
+
+    "demand_60d",
+    "active_days_60d",
+
+    "demand_90d",
+    "active_days_90d",
+    "demand_frequency_90d",
+
+    "last_demand_date",
+    "days_since_last_demand",
+
+    "avg_positive_demand_90d",
+
+    "recent_vs_long_term",
+
+    "demand_regime",
+    "activity_level",
+
+    "slow_moving",
+    "high_demand",
+    "dormant_90d",
+
+    "intermittent_forecast_30d",
+    "forecast_vs_recent_ratio"
+]
+
+
+features = features[
+    columns
+]
+
+
+# ============================================================
+# SAVE REGIME DATASET
+# ============================================================
+
+features.to_csv(
+    REGIME_FILE,
+    index=False
+)
+
+
+print()
+print(
+    "Demand regime file saved:"
+)
+
+print(
+    REGIME_FILE
+)
+
+
+# ============================================================
+# REGIME SUMMARY
+# ============================================================
+
+print()
+print("=" * 70)
+print("DEMAND REGIME SUMMARY")
+print("=" * 70)
+
+
+regime_summary = (
+    features
+    .groupby(
+        "demand_regime",
+        as_index=False
+    )
+    .agg(
+
+        store_sku_count=(
+            "sku_id",
+            "count"
+        ),
+
+        total_demand_30d=(
+            "demand_30d",
+            "sum"
+        ),
+
+        total_demand_90d=(
+            "demand_90d",
+            "sum"
+        ),
+
+        total_forecast_30d=(
+            "intermittent_forecast_30d",
+            "sum"
+        ),
+
+        avg_forecast_30d=(
+            "intermittent_forecast_30d",
+            "mean"
+        ),
+
+        avg_days_since_demand=(
+            "days_since_last_demand",
+            "mean"
+        )
+    )
+)
+
+
+regime_summary[
+    "forecast_share_pct"
+] = (
+    regime_summary[
+        "total_forecast_30d"
+    ]
+    /
+    features[
+        "intermittent_forecast_30d"
+    ].sum()
+    * 100
+)
+
+
+regime_summary = (
+    regime_summary
+    .sort_values(
+        "total_forecast_30d",
+        ascending=False
+    )
+)
+
+
+print(
+    regime_summary.to_string(
+        index=False
+    )
+)
+
+
+regime_summary.to_csv(
+    REGIME_SUMMARY_FILE,
+    index=False
+)
+
+
+# ============================================================
+# CALIBRATION INPUT
+# ============================================================
+
+calibration_input = features[
+    [
+        "store_id",
+        "sku_id",
+
+        "demand_30d",
+        "demand_60d",
+        "demand_90d",
+
+        "active_days_30d",
+        "active_days_90d",
+
+        "days_since_last_demand",
+
+        "demand_regime",
+        "activity_level",
+
+        "slow_moving",
+        "high_demand",
+        "dormant_90d",
+
+        "intermittent_forecast_30d"
+    ]
+].copy()
+
+
+calibration_input.to_csv(
+    CALIBRATION_INPUT_FILE,
+    index=False
+)
+
+
+print()
+print(
+    "Calibration input saved:"
+)
+
+print(
+    CALIBRATION_INPUT_FILE
+)
+
+
+# ============================================================
+# ADDITIONAL DIAGNOSTICS
+# ============================================================
+
+print()
+print("=" * 70)
+print("KEY DIAGNOSTICS")
+print("=" * 70)
+
+
+print()
+print(
+    "Total Store-SKU combinations:",
+    len(features)
+)
+
+
+print()
+print(
+    "Demand regime counts:"
+)
+
+print(
+    features[
+        "demand_regime"
+    ]
+    .value_counts()
+)
+
+
+print()
+print(
+    "Activity level counts:"
+)
+
+print(
+    features[
+        "activity_level"
+    ]
+    .value_counts()
+)
+
+
+print()
+print(
+    "Slow-moving Store-SKU:",
+    features[
+        "slow_moving"
+    ].sum()
+)
+
+
+print(
+    "High-demand Store-SKU:",
+    features[
+        "high_demand"
+    ].sum()
+)
+
+
+print(
+    "Dormant Store-SKU:",
+    features[
+        "dormant_90d"
+    ].sum()
+)
+
+
+# ============================================================
+# FINAL
+# ============================================================
+
+print()
+print("=" * 70)
+print("PHASE 6.3 COMPLETED")
+print("=" * 70)

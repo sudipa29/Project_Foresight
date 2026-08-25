@@ -1,0 +1,37 @@
+# Phase 1 - VS Code setup and project structure
+  1)After opening VScode --> terminal --> new Terminal --> Then execute the following code to activate .venv) 
+  2) Run in terminal -->"python -m venv .venv " 
+	  Then run -->"Set-ExecutionPolicy RemoteSigned -Scope CurrentUser" {Update your Execution Policy- just need to tell Windows that it is safe to run scripts for user account}
+  3) Run it to activate--> ".venv\Scripts\activate" --> after activate in the terminal it will look like "(.venv) PS E:\Zidio_Development_Internship\Project_Foresight>"
+  4) Install the requirements library in the terminal by running this command --> "pip install pandas numpy matplotlib plotly seaborn scikit-learn xgboost lightgbm prophet streamlit fastapi uvicorn joblib openpyxl"
+  5) Save Dependencies --> "pip freeze > requirements.txt" { This file allows anyone else to recreate your project's Python environment.}
+  6) Verify Python --> "python --version" --> "pip --version"
+  7) Create the Main Python Files -->"New-Item -Path src\load_data.py, src\clean_data.py, src\merge_data.py, src\eda.py, src\feature_engineering.py, src\forecasting.py, src\risk_engine.py, 	src	\config.py, src\utils.py -ItemType File"
+  8) Create the Dashboard Files --> "mkdir dashboard\pages" --> "New-Item -Path dashboard\app.py -ItemType File" --> "New-Item -Path dashboard\pages\home.py, dashboard\pages\sales.py,   					dashboard\pages\inventory.py, dashboard\pages\forecast.py, dashboard\pages\risk.py -ItemType File"
+  9) Create a README
+
+# Phase 2 – Data Loading
+	1) open -->load_data.py
+	2) Import libraries --> import pandas as pd "#It Read CSV files,Clean data,Merge datasets,Analyze data"
+				import os "#os module helps Python work with folders and file paths.Instead of writing long file paths repeatedly, we can build them dynamically."
+	3) Load Dataset
+	4) Check files loaded successfully/not
+	5) Verify the first few rows of each dataset
+	6) Check for missing values, duplicate values, datatypes, summary statistics, unique values in each dataset
+
+
+# Phase 1 – Data Cleaning
+
+# Phase 4 – Data Merging
+
+# Phase 5 – EDA
+
+# Phase 6 – Feature Engineering
+
+# Phase 7 – Forecasting
+
+# Phase 8 – Risk Engine
+
+# Phase 9 – Streamlit Dashboard
+
+# Phase 10 – Deployment

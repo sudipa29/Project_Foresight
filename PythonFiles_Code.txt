@@ -1,0 +1,17060 @@
+source code:
+
+feature_engineering.py -->blank
+
+demand_forecasting.py -->
+
+# ============================================================
+
+# PROJECT FORESIGHT
+
+# Phase 5 - Demand Forecasting
+
+# Step 5.1 - Forecast Dataset Preparation
+
+# ============================================================
+
+
+
+import pandas as pd
+
+import numpy as np
+
+from pathlib import Path
+
+
+
+
+
+# ------------------------------------------------------------
+
+# PATHS
+
+# ------------------------------------------------------------
+
+
+
+BASE_PATH = Path(
+
+    r"E:\Zidio_Development_Internship\Project_Foresight"
+
+)
+
+
+
+PROCESSED_PATH = BASE_PATH / "data" / "processed"
+
+
+
+DEMAND_PATH = (
+
+    PROCESSED_PATH /
+
+    "daily_demand.csv"
+
+)
+
+
+
+FORECAST_PATH = (
+
+    PROCESSED_PATH /
+
+    "forecasting"
+
+)
+
+
+
+FORECAST_PATH.mkdir(
+
+    parents=True,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# HEADER
+
+# ------------------------------------------------------------
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - DEMAND FORECASTING ENGINE")
+
+print("=" * 70)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# LOAD DATA
+
+# ------------------------------------------------------------
+
+
+
+print("\nLoading daily demand data...")
+
+
+
+demand = pd.read_csv(
+
+    DEMAND_PATH,
+
+    low_memory=False
+
+)
+
+
+
+print(
+
+    "Daily demand shape:",
+
+    demand.shape
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DATE CONVERSION
+
+# ------------------------------------------------------------
+
+
+
+demand["date"] = pd.to_datetime(
+
+    demand["date"],
+
+    errors="coerce"
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# BASIC VALIDATION
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("BASIC VALIDATION")
+
+print("=" * 70)
+
+
+
+print(
+
+    "\nDate range:"
+
+)
+
+
+
+print(
+
+    demand["date"].min(),
+
+    "to",
+
+    demand["date"].max()
+
+)
+
+
+
+print(
+
+    "\nStores:",
+
+    demand["store_id"].nunique()
+
+)
+
+
+
+print(
+
+    "SKUs:",
+
+    demand["sku_id"].nunique()
+
+)
+
+
+
+print(
+
+    "Store-SKU combinations:",
+
+    demand[
+
+        ["store_id", "sku_id"]
+
+    ].drop_duplicates().shape[0]
+
+)
+
+
+
+print(
+
+    "Rows:",
+
+    len(demand)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# CHECK REQUIRED COLUMNS
+
+# ------------------------------------------------------------
+
+
+
+required_columns = [
+
+    "date",
+
+    "store_id",
+
+    "sku_id",
+
+    "units_sold"
+
+]
+
+
+
+missing_columns = [
+
+    col
+
+    for col in required_columns
+
+    if col not in demand.columns
+
+]
+
+
+
+if missing_columns:
+
+
+
+    raise ValueError(
+
+        f"Missing required columns: {missing_columns}"
+
+    )
+
+
+
+
+
+# ------------------------------------------------------------
+
+# NUMERIC CONVERSION
+
+# ------------------------------------------------------------
+
+
+
+demand["units_sold"] = pd.to_numeric(
+
+    demand["units_sold"],
+
+    errors="coerce"
+
+)
+
+
+
+demand["units_sold"] = (
+
+    demand["units_sold"]
+
+    .fillna(0)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# REMOVE INVALID DATES
+
+# ------------------------------------------------------------
+
+
+
+invalid_dates = (
+
+    demand["date"].isna().sum()
+
+)
+
+
+
+print(
+
+    "\nInvalid dates:",
+
+    invalid_dates
+
+)
+
+
+
+demand = demand[
+
+    demand["date"].notna()
+
+].copy()
+
+
+
+
+
+# ------------------------------------------------------------
+
+# CHECK NEGATIVE DEMAND
+
+# ------------------------------------------------------------
+
+
+
+negative_demand = (
+
+    demand["units_sold"] < 0
+
+).sum()
+
+
+
+print(
+
+    "Negative demand rows:",
+
+    negative_demand
+
+)
+
+
+
+if negative_demand > 0:
+
+
+
+    print(
+
+        "Warning: negative demand detected."
+
+    )
+
+
+
+
+
+# ------------------------------------------------------------
+
+# SORT DATA
+
+# ------------------------------------------------------------
+
+
+
+demand = demand.sort_values(
+
+    [
+
+        "store_id",
+
+        "sku_id",
+
+        "date"
+
+    ]
+
+).reset_index(
+
+    drop=True
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# CREATE COMPLETE DAILY STORE-SKU GRID
+
+# ------------------------------------------------------------
+
+#
+
+# This is important for forecasting.
+
+#
+
+# If a store-SKU has no sales on a particular day,
+
+# that day must appear as zero demand instead of
+
+# being completely absent from the time series.
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("CREATING COMPLETE DAILY DEMAND GRID")
+
+print("=" * 70)
+
+
+
+min_date = demand["date"].min()
+
+max_date = demand["date"].max()
+
+
+
+print(
+
+    "\nForecasting date range:",
+
+    min_date.date(),
+
+    "to",
+
+    max_date.date()
+
+)
+
+
+
+date_range = pd.date_range(
+
+    start=min_date,
+
+    end=max_date,
+
+    freq="D"
+
+)
+
+
+
+store_sku = (
+
+    demand[
+
+        [
+
+            "store_id",
+
+            "sku_id"
+
+        ]
+
+    ]
+
+    .drop_duplicates()
+
+)
+
+
+
+print(
+
+    "\nUnique store-SKU combinations:",
+
+    len(store_sku)
+
+)
+
+
+
+print(
+
+    "Number of dates:",
+
+    len(date_range)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# CREATE GRID
+
+# ------------------------------------------------------------
+
+
+
+store_sku["key"] = 1
+
+
+
+dates = pd.DataFrame(
+
+    {
+
+        "date": date_range,
+
+        "key": 1
+
+    }
+
+)
+
+
+
+forecast_grid = store_sku.merge(
+
+    dates,
+
+    on="key",
+
+    how="outer"
+
+)
+
+
+
+forecast_grid = forecast_grid.drop(
+
+    columns=["key"]
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# MERGE ACTUAL DEMAND
+
+# ------------------------------------------------------------
+
+
+
+actual_demand = (
+
+    demand[
+
+        [
+
+            "date",
+
+            "store_id",
+
+            "sku_id",
+
+            "units_sold"
+
+        ]
+
+    ]
+
+    .groupby(
+
+        [
+
+            "date",
+
+            "store_id",
+
+            "sku_id"
+
+        ],
+
+        as_index=False
+
+    )
+
+    .agg(
+
+        units_sold=("units_sold", "sum")
+
+    )
+
+)
+
+
+
+forecast_grid = forecast_grid.merge(
+
+    actual_demand,
+
+    on=[
+
+        "date",
+
+        "store_id",
+
+        "sku_id"
+
+    ],
+
+    how="left"
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# FILL MISSING DEMAND WITH ZERO
+
+# ------------------------------------------------------------
+
+
+
+forecast_grid["units_sold"] = (
+
+    forecast_grid["units_sold"]
+
+    .fillna(0)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# SORT
+
+# ------------------------------------------------------------
+
+
+
+forecast_grid = forecast_grid.sort_values(
+
+    [
+
+        "store_id",
+
+        "sku_id",
+
+        "date"
+
+    ]
+
+).reset_index(
+
+    drop=True
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# ADD TIME FEATURES
+
+# ------------------------------------------------------------
+
+
+
+forecast_grid["day_of_week"] = (
+
+    forecast_grid["date"]
+
+    .dt.dayofweek
+
+)
+
+
+
+forecast_grid["day_name"] = (
+
+    forecast_grid["date"]
+
+    .dt.day_name()
+
+)
+
+
+
+forecast_grid["week_of_year"] = (
+
+    forecast_grid["date"]
+
+    .dt.isocalendar()
+
+    .week
+
+    .astype(int)
+
+)
+
+
+
+forecast_grid["month"] = (
+
+    forecast_grid["date"]
+
+    .dt.month
+
+)
+
+
+
+forecast_grid["quarter"] = (
+
+    forecast_grid["date"]
+
+    .dt.quarter
+
+)
+
+
+
+forecast_grid["year"] = (
+
+    forecast_grid["date"]
+
+    .dt.year
+
+)
+
+
+
+forecast_grid["is_weekend"] = (
+
+    forecast_grid["day_of_week"] >= 5
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# STORE-SKU DEMAND SUMMARY
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("STORE-SKU DEMAND SUMMARY")
+
+print("=" * 70)
+
+
+
+summary = (
+
+    forecast_grid
+
+    .groupby(
+
+        [
+
+            "store_id",
+
+            "sku_id"
+
+        ],
+
+        as_index=False
+
+    )
+
+    .agg(
+
+        total_units=(
+
+            "units_sold",
+
+            "sum"
+
+        ),
+
+        avg_daily_units=(
+
+            "units_sold",
+
+            "mean"
+
+        ),
+
+        max_daily_units=(
+
+            "units_sold",
+
+            "max"
+
+        ),
+
+        active_days=(
+
+            "units_sold",
+
+            lambda x: (x > 0).sum()
+
+        ),
+
+        zero_demand_days=(
+
+            "units_sold",
+
+            lambda x: (x == 0).sum()
+
+        ),
+
+        demand_std=(
+
+            "units_sold",
+
+            "std"
+
+        )
+
+    )
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DEMAND ACTIVITY RATE
+
+# ------------------------------------------------------------
+
+
+
+total_days = (
+
+    forecast_grid["date"]
+
+    .nunique()
+
+)
+
+
+
+summary["demand_activity_rate"] = (
+
+    summary["active_days"] /
+
+    total_days
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DEMAND CLASSIFICATION
+
+# ------------------------------------------------------------
+
+
+
+def classify_demand_activity(rate):
+
+
+
+    if rate == 0:
+
+        return "No Demand"
+
+
+
+    elif rate < 0.10:
+
+        return "Very Sparse"
+
+
+
+    elif rate < 0.30:
+
+        return "Sparse"
+
+
+
+    elif rate < 0.60:
+
+        return "Moderate"
+
+
+
+    else:
+
+        return "Frequent"
+
+
+
+
+
+summary["demand_activity_class"] = (
+
+    summary["demand_activity_rate"]
+
+    .apply(classify_demand_activity)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# PRINT DEMAND ACTIVITY DISTRIBUTION
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "\nDemand activity distribution:"
+
+)
+
+
+
+print(
+
+    summary[
+
+        "demand_activity_class"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# PRINT DEMAND STATISTICS
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "\nTotal store-SKU combinations:",
+
+    len(summary)
+
+)
+
+
+
+print(
+
+    "\nTotal units sold:",
+
+    summary["total_units"].sum()
+
+)
+
+
+
+print(
+
+    "\nAverage daily units:",
+
+    forecast_grid[
+
+        "units_sold"
+
+    ].mean()
+
+)
+
+
+
+print(
+
+    "\nMedian daily units:",
+
+    forecast_grid[
+
+        "units_sold"
+
+    ].median()
+
+)
+
+
+
+print(
+
+    "\nZero-demand observations:",
+
+    (
+
+        forecast_grid[
+
+            "units_sold"
+
+        ] == 0
+
+    ).sum()
+
+)
+
+
+
+print(
+
+    "\nTotal observations:",
+
+    len(forecast_grid)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# SAVE FORECAST DAILY DATA
+
+# ------------------------------------------------------------
+
+
+
+forecast_daily_file = (
+
+    FORECAST_PATH /
+
+    "forecast_demand_daily.csv"
+
+)
+
+
+
+forecast_grid.to_csv(
+
+    forecast_daily_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# SAVE STORE-SKU SUMMARY
+
+# ------------------------------------------------------------
+
+
+
+summary_file = (
+
+    FORECAST_PATH /
+
+    "forecast_store_sku_summary.csv"
+
+)
+
+
+
+summary.to_csv(
+
+    summary_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# FINAL VALIDATION
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("FINAL VALIDATION")
+
+print("=" * 70)
+
+
+
+print(
+
+    "\nForecast daily shape:",
+
+    forecast_grid.shape
+
+)
+
+
+
+print(
+
+    "Forecast summary shape:",
+
+    summary.shape
+
+)
+
+
+
+print(
+
+    "Missing dates:",
+
+    forecast_grid["date"].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing store IDs:",
+
+    forecast_grid["store_id"].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing SKU IDs:",
+
+    forecast_grid["sku_id"].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing demand values:",
+
+    forecast_grid["units_sold"].isna().sum()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# OUTPUT
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("PHASE 5.1 COMPLETED")
+
+print("=" * 70)
+
+
+
+print(
+
+    "\nForecast daily dataset saved to:"
+
+)
+
+
+
+print(
+
+    forecast_daily_file
+
+)
+
+
+
+print(
+
+    "\nStore-SKU summary saved to:"
+
+)
+
+
+
+print(
+
+    summary_file
+
+)
+
+
+
+demand_forecasting_baseline.py-->
+
+# ============================================================
+
+# PROJECT FORESIGHT
+
+# Phase 5 - Demand Forecasting
+
+# Step 5.2 - Demand Pattern Analysis & Baseline Forecast
+
+# ============================================================
+
+
+
+import pandas as pd
+
+import numpy as np
+
+from pathlib import Path
+
+
+
+
+
+# ------------------------------------------------------------
+
+# PATHS
+
+# ------------------------------------------------------------
+
+
+
+BASE_PATH = Path(
+
+    r"E:\Zidio_Development_Internship\Project_Foresight"
+
+)
+
+
+
+PROCESSED_PATH = (
+
+    BASE_PATH /
+
+    "data" /
+
+    "processed"
+
+)
+
+
+
+FORECAST_PATH = (
+
+    PROCESSED_PATH /
+
+    "forecasting"
+
+)
+
+
+
+INPUT_PATH = (
+
+    FORECAST_PATH /
+
+    "forecast_demand_daily.csv"
+
+)
+
+
+
+SUMMARY_PATH = (
+
+    FORECAST_PATH /
+
+    "forecast_store_sku_summary.csv"
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# OUTPUT DIRECTORY
+
+# ------------------------------------------------------------
+
+
+
+FORECAST_PATH.mkdir(
+
+    parents=True,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# HEADER
+
+# ------------------------------------------------------------
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - DEMAND FORECAST BASELINE")
+
+print("=" * 70)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# LOAD DATA
+
+# ------------------------------------------------------------
+
+
+
+print("\nLoading forecast dataset...")
+
+
+
+demand = pd.read_csv(
+
+    INPUT_PATH,
+
+    low_memory=False
+
+)
+
+
+
+print(
+
+    "Forecast dataset shape:",
+
+    demand.shape
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DATE CONVERSION
+
+# ------------------------------------------------------------
+
+
+
+demand["date"] = pd.to_datetime(
+
+    demand["date"],
+
+    errors="coerce"
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# BASIC VALIDATION
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("DATA VALIDATION")
+
+print("=" * 70)
+
+
+
+print(
+
+    "\nDate range:",
+
+    demand["date"].min(),
+
+    "to",
+
+    demand["date"].max()
+
+)
+
+
+
+print(
+
+    "Rows:",
+
+    len(demand)
+
+)
+
+
+
+print(
+
+    "Stores:",
+
+    demand["store_id"].nunique()
+
+)
+
+
+
+print(
+
+    "SKUs:",
+
+    demand["sku_id"].nunique()
+
+)
+
+
+
+print(
+
+    "Store-SKU combinations:",
+
+    demand[
+
+        ["store_id", "sku_id"]
+
+    ].drop_duplicates().shape[0]
+
+)
+
+
+
+print(
+
+    "Missing demand:",
+
+    demand["units_sold"].isna().sum()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# SORT DATA
+
+# ------------------------------------------------------------
+
+
+
+demand = demand.sort_values(
+
+    [
+
+        "store_id",
+
+        "sku_id",
+
+        "date"
+
+    ]
+
+).reset_index(
+
+    drop=True
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# GLOBAL DEMAND STATISTICS
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("GLOBAL DEMAND STATISTICS")
+
+print("=" * 70)
+
+
+
+total_observations = len(demand)
+
+
+
+zero_observations = (
+
+    demand["units_sold"] == 0
+
+).sum()
+
+
+
+positive_observations = (
+
+    demand["units_sold"] > 0
+
+).sum()
+
+
+
+zero_pct = (
+
+    zero_observations /
+
+    total_observations *
+
+    100
+
+)
+
+
+
+positive_pct = (
+
+    positive_observations /
+
+    total_observations *
+
+    100
+
+)
+
+
+
+print(
+
+    "\nTotal observations:",
+
+    total_observations
+
+)
+
+
+
+print(
+
+    "Zero-demand observations:",
+
+    zero_observations
+
+)
+
+
+
+print(
+
+    "Positive-demand observations:",
+
+    positive_observations
+
+)
+
+
+
+print(
+
+    f"Zero-demand percentage: {zero_pct:.2f}%"
+
+)
+
+
+
+print(
+
+    f"Positive-demand percentage: {positive_pct:.2f}%"
+
+)
+
+
+
+print(
+
+    "\nMean daily demand:",
+
+    demand["units_sold"].mean()
+
+)
+
+
+
+print(
+
+    "Median daily demand:",
+
+    demand["units_sold"].median()
+
+)
+
+
+
+print(
+
+    "Maximum daily demand:",
+
+    demand["units_sold"].max()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# STORE-SKU DEMAND PROFILE
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("STORE-SKU DEMAND PROFILE")
+
+print("=" * 70)
+
+
+
+
+
+def calculate_profile(group):
+
+
+
+    units = group["units_sold"]
+
+
+
+    total_days = len(units)
+
+
+
+    active_days = (
+
+        units > 0
+
+    ).sum()
+
+
+
+    zero_days = (
+
+        units == 0
+
+    ).sum()
+
+
+
+    activity_rate = (
+
+        active_days /
+
+        total_days
+
+    )
+
+
+
+    positive_demand = (
+
+        units[units > 0]
+
+    )
+
+
+
+    if len(positive_demand) > 0:
+
+
+
+        avg_positive_demand = (
+
+            positive_demand.mean()
+
+        )
+
+
+
+        std_positive_demand = (
+
+            positive_demand.std()
+
+        )
+
+
+
+    else:
+
+
+
+        avg_positive_demand = 0
+
+
+
+        std_positive_demand = 0
+
+
+
+    if activity_rate == 0:
+
+
+
+        demand_class = "No Demand"
+
+
+
+    elif activity_rate < 0.05:
+
+
+
+        demand_class = "Extremely Sparse"
+
+
+
+    elif activity_rate < 0.10:
+
+
+
+        demand_class = "Very Sparse"
+
+
+
+    elif activity_rate < 0.30:
+
+
+
+        demand_class = "Sparse"
+
+
+
+    elif activity_rate < 0.60:
+
+
+
+        demand_class = "Moderate"
+
+
+
+    else:
+
+
+
+        demand_class = "Frequent"
+
+
+
+    return pd.Series(
+
+        {
+
+            "total_units": units.sum(),
+
+
+
+            "active_days":
+
+                active_days,
+
+
+
+            "zero_days":
+
+                zero_days,
+
+
+
+            "activity_rate":
+
+                activity_rate,
+
+
+
+            "avg_positive_demand":
+
+                avg_positive_demand,
+
+
+
+            "std_positive_demand":
+
+                std_positive_demand,
+
+
+
+            "max_daily_demand":
+
+                units.max(),
+
+
+
+            "demand_class":
+
+                demand_class
+
+        }
+
+    )
+
+
+
+
+
+profile = (
+
+    demand
+
+    .groupby(
+
+        [
+
+            "store_id",
+
+            "sku_id"
+
+        ]
+
+    )
+
+    .apply(
+
+        calculate_profile,
+
+        include_groups=False
+
+    )
+
+    .reset_index()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DEMAND CLASS DISTRIBUTION
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "\nDemand class distribution:"
+
+)
+
+
+
+print(
+
+    profile[
+
+        "demand_class"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# ACTIVITY RATE SUMMARY
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "\nActivity rate statistics:"
+
+)
+
+
+
+print(
+
+    profile[
+
+        "activity_rate"
+
+    ].describe()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# RECENT DEMAND WINDOWS
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("RECENT DEMAND WINDOWS")
+
+print("=" * 70)
+
+
+
+
+
+reference_date = demand["date"].max()
+
+
+
+
+
+print(
+
+    "\nReference date:",
+
+    reference_date.date()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# 7-DAY DEMAND
+
+# ------------------------------------------------------------
+
+
+
+recent_7d = demand[
+
+    (
+
+        demand["date"]
+
+        >=
+
+        reference_date -
+
+        pd.Timedelta(days=6)
+
+    )
+
+].copy()
+
+
+
+
+
+# ------------------------------------------------------------
+
+# 14-DAY DEMAND
+
+# ------------------------------------------------------------
+
+
+
+recent_14d = demand[
+
+    (
+
+        demand["date"]
+
+        >=
+
+        reference_date -
+
+        pd.Timedelta(days=13)
+
+    )
+
+].copy()
+
+
+
+
+
+# ------------------------------------------------------------
+
+# 30-DAY DEMAND
+
+# ------------------------------------------------------------
+
+
+
+recent_30d = demand[
+
+    (
+
+        demand["date"]
+
+        >=
+
+        reference_date -
+
+        pd.Timedelta(days=29)
+
+    )
+
+].copy()
+
+
+
+
+
+# ------------------------------------------------------------
+
+# 90-DAY DEMAND
+
+# ------------------------------------------------------------
+
+
+
+recent_90d = demand[
+
+    (
+
+        demand["date"]
+
+        >=
+
+        reference_date -
+
+        pd.Timedelta(days=89)
+
+    )
+
+].copy()
+
+
+
+
+
+def aggregate_window(
+
+    df,
+
+    name
+
+):
+
+
+
+    return (
+
+        df
+
+        .groupby(
+
+            [
+
+                "store_id",
+
+                "sku_id"
+
+            ],
+
+            as_index=False
+
+        )
+
+        ["units_sold"]
+
+        .sum()
+
+        .rename(
+
+            columns={
+
+                "units_sold": name
+
+            }
+
+        )
+
+    )
+
+
+
+
+
+window_7d = aggregate_window(
+
+    recent_7d,
+
+    "units_7d"
+
+)
+
+
+
+window_14d = aggregate_window(
+
+    recent_14d,
+
+    "units_14d"
+
+)
+
+
+
+window_30d = aggregate_window(
+
+    recent_30d,
+
+    "units_30d"
+
+)
+
+
+
+window_90d = aggregate_window(
+
+    recent_90d,
+
+    "units_90d"
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# MERGE WINDOWS
+
+# ------------------------------------------------------------
+
+
+
+baseline = profile.copy()
+
+
+
+for window in [
+
+    window_7d,
+
+    window_14d,
+
+    window_30d,
+
+    window_90d
+
+]:
+
+
+
+    baseline = baseline.merge(
+
+        window,
+
+        on=[
+
+            "store_id",
+
+            "sku_id"
+
+        ],
+
+        how="left"
+
+    )
+
+
+
+
+
+baseline[
+
+    [
+
+        "units_7d",
+
+        "units_14d",
+
+        "units_30d",
+
+        "units_90d"
+
+    ]
+
+] = (
+
+    baseline[
+
+        [
+
+            "units_7d",
+
+            "units_14d",
+
+            "units_30d",
+
+            "units_90d"
+
+        ]
+
+    ]
+
+    .fillna(0)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DAILY BASELINE DEMAND
+
+# ------------------------------------------------------------
+
+
+
+baseline["avg_daily_7d"] = (
+
+    baseline["units_7d"] / 7
+
+)
+
+
+
+baseline["avg_daily_14d"] = (
+
+    baseline["units_14d"] / 14
+
+)
+
+
+
+baseline["avg_daily_30d"] = (
+
+    baseline["units_30d"] / 30
+
+)
+
+
+
+baseline["avg_daily_90d"] = (
+
+    baseline["units_90d"] / 90
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# BASELINE FORECASTS
+
+# ------------------------------------------------------------
+
+#
+
+# Forecast is expressed as expected units per day.
+
+#
+
+# These are NOT ML forecasts yet.
+
+# They are benchmark models that future ML models
+
+# must outperform.
+
+# ------------------------------------------------------------
+
+
+
+baseline["forecast_naive"] = (
+
+    baseline["units_7d"] / 7
+
+)
+
+
+
+
+
+baseline["forecast_ma_7"] = (
+
+    baseline["units_7d"] / 7
+
+)
+
+
+
+
+
+baseline["forecast_ma_14"] = (
+
+    baseline["units_14d"] / 14
+
+)
+
+
+
+
+
+baseline["forecast_ma_30"] = (
+
+    baseline["units_30d"] / 30
+
+)
+
+
+
+
+
+baseline["forecast_ma_90"] = (
+
+    baseline["units_90d"] / 90
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# WEIGHTED MOVING AVERAGE
+
+# ------------------------------------------------------------
+
+#
+
+# Recent demand receives more weight.
+
+#
+
+# 7-day  = 50%
+
+# 14-day = 30%
+
+# 30-day = 20%
+
+# ------------------------------------------------------------
+
+
+
+baseline["forecast_weighted"] = (
+
+    0.50 *
+
+    baseline["avg_daily_7d"]
+
+    +
+
+    0.30 *
+
+    baseline["avg_daily_14d"]
+
+    +
+
+    0.20 *
+
+    baseline["avg_daily_30d"]
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# DEMAND TREND
+
+# ------------------------------------------------------------
+
+
+
+baseline["recent_vs_90d_ratio"] = np.where(
+
+    baseline["avg_daily_90d"] > 0,
+
+
+
+    baseline["avg_daily_7d"] /
+
+    baseline["avg_daily_90d"],
+
+
+
+    np.nan
+
+)
+
+
+
+
+
+def classify_trend(ratio):
+
+
+
+    if pd.isna(ratio):
+
+
+
+        return "No Historical Demand"
+
+
+
+    if ratio >= 1.50:
+
+
+
+        return "Strongly Increasing"
+
+
+
+    elif ratio >= 1.15:
+
+
+
+        return "Increasing"
+
+
+
+    elif ratio <= 0.67:
+
+
+
+        return "Strongly Decreasing"
+
+
+
+    elif ratio <= 0.85:
+
+
+
+        return "Decreasing"
+
+
+
+    else:
+
+
+
+        return "Stable"
+
+
+
+
+
+baseline["baseline_trend"] = (
+
+    baseline[
+
+        "recent_vs_90d_ratio"
+
+    ]
+
+    .apply(classify_trend)
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# FORECASTABILITY
+
+# ------------------------------------------------------------
+
+
+
+def classify_forecastability(row):
+
+
+
+    activity = row[
+
+        "activity_rate"
+
+    ]
+
+
+
+    if activity == 0:
+
+
+
+        return "Not Forecastable"
+
+
+
+    elif activity < 0.05:
+
+
+
+        return "Very Difficult"
+
+
+
+    elif activity < 0.10:
+
+
+
+        return "Difficult"
+
+
+
+    elif activity < 0.30:
+
+
+
+        return "Moderate"
+
+
+
+    else:
+
+
+
+        return "Forecastable"
+
+
+
+
+
+baseline[
+
+    "forecastability"
+
+] = baseline.apply(
+
+    classify_forecastability,
+
+    axis=1
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# EXPECTED 30-DAY DEMAND
+
+# ------------------------------------------------------------
+
+
+
+baseline[
+
+    "expected_30d_demand"
+
+] = (
+
+    baseline[
+
+        "forecast_weighted"
+
+    ] * 30
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# EXPECTED 7-DAY DEMAND
+
+# ------------------------------------------------------------
+
+
+
+baseline[
+
+    "expected_7d_demand"
+
+] = (
+
+    baseline[
+
+        "forecast_weighted"
+
+    ] * 7
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# PRINT BASELINE SUMMARY
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("BASELINE FORECAST SUMMARY")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nAverage daily demand by method:"
+
+)
+
+
+
+print(
+
+    "7-day:",
+
+    baseline[
+
+        "forecast_ma_7"
+
+    ].mean()
+
+)
+
+
+
+print(
+
+    "14-day:",
+
+    baseline[
+
+        "forecast_ma_14"
+
+    ].mean()
+
+)
+
+
+
+print(
+
+    "30-day:",
+
+    baseline[
+
+        "forecast_ma_30"
+
+    ].mean()
+
+)
+
+
+
+print(
+
+    "90-day:",
+
+    baseline[
+
+        "forecast_ma_90"
+
+    ].mean()
+
+)
+
+
+
+print(
+
+    "Weighted:",
+
+    baseline[
+
+        "forecast_weighted"
+
+    ].mean()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# TREND DISTRIBUTION
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "\nBaseline trend distribution:"
+
+)
+
+
+
+print(
+
+    baseline[
+
+        "baseline_trend"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# FORECASTABILITY DISTRIBUTION
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "\nForecastability distribution:"
+
+)
+
+
+
+print(
+
+    baseline[
+
+        "forecastability"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# TOP DEMAND ITEMS
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 STORE-SKU COMBINATIONS BY 30-DAY DEMAND")
+
+print("=" * 70)
+
+
+
+
+
+top_demand = (
+
+    baseline
+
+    .sort_values(
+
+        "units_30d",
+
+        ascending=False
+
+    )
+
+    .head(20)
+
+)
+
+
+
+
+
+print(
+
+    top_demand[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "units_7d",
+
+            "units_14d",
+
+            "units_30d",
+
+            "units_90d",
+
+            "avg_daily_30d",
+
+            "forecast_weighted",
+
+            "baseline_trend",
+
+            "forecastability"
+
+        ]
+
+    ]
+
+    .to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# MOST INTERMITTENT ACTIVE ITEMS
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("MOST INTERMITTENT ACTIVE ITEMS")
+
+print("=" * 70)
+
+
+
+
+
+intermittent = (
+
+    baseline[
+
+        baseline["active_days"] > 0
+
+    ]
+
+    .sort_values(
+
+        [
+
+            "activity_rate",
+
+            "total_units"
+
+        ],
+
+        ascending=[
+
+            True,
+
+            False
+
+        ]
+
+    )
+
+    .head(20)
+
+)
+
+
+
+
+
+print(
+
+    intermittent[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "total_units",
+
+            "active_days",
+
+            "zero_days",
+
+            "activity_rate",
+
+            "avg_positive_demand",
+
+            "max_daily_demand",
+
+            "forecastability"
+
+        ]
+
+    ]
+
+    .to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# SAVE BASELINE DATASET
+
+# ------------------------------------------------------------
+
+
+
+output_file = (
+
+    FORECAST_PATH /
+
+    "demand_forecast_baseline.csv"
+
+)
+
+
+
+baseline.to_csv(
+
+    output_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# FINAL VALIDATION
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("FINAL VALIDATION")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nBaseline shape:",
+
+    baseline.shape
+
+)
+
+
+
+print(
+
+    "Missing forecast values:",
+
+    baseline[
+
+        "forecast_weighted"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing trend:",
+
+    baseline[
+
+        "baseline_trend"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing forecastability:",
+
+    baseline[
+
+        "forecastability"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Negative forecast values:",
+
+    (
+
+        baseline[
+
+            "forecast_weighted"
+
+        ] < 0
+
+    ).sum()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# FINAL
+
+# ------------------------------------------------------------
+
+
+
+print("\n" + "=" * 70)
+
+print("PHASE 5.2 COMPLETED")
+
+print("=" * 70)
+
+
+
+print(
+
+    "\nBaseline forecast saved to:"
+
+)
+
+
+
+print(
+
+    output_file
+
+)
+
+baseline_forecasting.py -->
+
+import pandas as pd
+
+import numpy as np
+
+from pathlib import Path
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - BASELINE DEMAND FORECASTING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. LOAD FORECASTING DATASET
+
+# ============================================================
+
+
+
+print("\nLoading forecasting dataset...")
+
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+
+
+DATA_PATH = (
+
+    BASE_DIR
+
+    / "data"
+
+    / "processed"
+
+    / "forecasting"
+
+    / "daily_forecasting_dataset.csv"
+
+)
+
+
+
+df = pd.read_csv(DATA_PATH)
+
+
+
+df["date"] = pd.to_datetime(df["date"])
+
+
+
+df = df.sort_values("date").reset_index(drop=True)
+
+
+
+print("Dataset loaded successfully!")
+
+print("Shape:", df.shape)
+
+
+
+
+
+# ============================================================
+
+# 2. BASIC INFORMATION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("DATE RANGE")
+
+print("=" * 70)
+
+
+
+print("Start Date:", df["date"].min())
+
+print("End Date  :", df["date"].max())
+
+print("Total Days:", len(df))
+
+
+
+
+
+# ============================================================
+
+# 3. TRAIN / TEST SPLIT
+
+# ============================================================
+
+
+
+# Last 90 days are used as test data
+
+TEST_DAYS = 90
+
+
+
+train = df.iloc[:-TEST_DAYS].copy()
+
+test = df.iloc[-TEST_DAYS:].copy()
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAIN / TEST SPLIT")
+
+print("=" * 70)
+
+
+
+print("Training observations:", len(train))
+
+print("Testing observations :", len(test))
+
+
+
+print("\nTraining period:")
+
+print(train["date"].min(), "to", train["date"].max())
+
+
+
+print("\nTesting period:")
+
+print(test["date"].min(), "to", test["date"].max())
+
+
+
+
+
+# ============================================================
+
+# 4. ACTUAL DEMAND
+
+# ============================================================
+
+
+
+y_train = train["units_sold"].values
+
+y_test = test["units_sold"].values
+
+
+
+
+
+# ============================================================
+
+# 5. BASELINE 1 — NAIVE FORECAST
+
+# ============================================================
+
+
+
+# Tomorrow's demand = today's demand
+
+
+
+test["naive_forecast"] = test["lag_1"]
+
+
+
+
+
+# ============================================================
+
+# 6. BASELINE 2 — 7-DAY SEASONAL NAIVE
+
+# ============================================================
+
+
+
+# Demand forecast = demand from same weekday previous week
+
+
+
+test["seasonal_naive_7"] = test["lag_7"]
+
+
+
+
+
+# ============================================================
+
+# 7. BASELINE 3 — 7-DAY MOVING AVERAGE
+
+# ============================================================
+
+
+
+test["moving_average_7"] = test["rolling_mean_7"]
+
+
+
+
+
+# ============================================================
+
+# 8. EVALUATION FUNCTION
+
+# ============================================================
+
+
+
+def calculate_metrics(actual, predicted):
+
+
+
+    actual = np.array(actual)
+
+    predicted = np.array(predicted)
+
+
+
+    mae = np.mean(
+
+        np.abs(actual - predicted)
+
+    )
+
+
+
+    rmse = np.sqrt(
+
+        np.mean(
+
+            (actual - predicted) ** 2
+
+        )
+
+    )
+
+
+
+    # Avoid division by zero
+
+    non_zero = actual != 0
+
+
+
+    if non_zero.sum() > 0:
+
+
+
+        mape = np.mean(
+
+            np.abs(
+
+                (actual[non_zero] - predicted[non_zero])
+
+                / actual[non_zero]
+
+            )
+
+        ) * 100
+
+
+
+    else:
+
+
+
+        mape = np.nan
+
+
+
+    # Weighted Absolute Percentage Error
+
+    wape = (
+
+        np.sum(np.abs(actual - predicted))
+
+        / np.sum(np.abs(actual))
+
+    ) * 100
+
+
+
+    return mae, rmse, mape, wape
+
+
+
+
+
+# ============================================================
+
+# 9. CALCULATE BASELINE METRICS
+
+# ============================================================
+
+
+
+results = []
+
+
+
+models = {
+
+    "Naive": test["naive_forecast"],
+
+    "Seasonal Naive (7-Day)": test["seasonal_naive_7"],
+
+    "Moving Average (7-Day)": test["moving_average_7"]
+
+}
+
+
+
+
+
+for model_name, predictions in models.items():
+
+
+
+    valid = (
+
+        predictions.notna()
+
+        & test["units_sold"].notna()
+
+    )
+
+
+
+    actual = test.loc[valid, "units_sold"]
+
+    predicted = predictions.loc[valid]
+
+
+
+    mae, rmse, mape, wape = calculate_metrics(
+
+        actual,
+
+        predicted
+
+    )
+
+
+
+    results.append({
+
+        "model": model_name,
+
+        "MAE": mae,
+
+        "RMSE": rmse,
+
+        "MAPE": mape,
+
+        "WAPE": wape
+
+    })
+
+
+
+
+
+results_df = pd.DataFrame(results)
+
+
+
+
+
+# ============================================================
+
+# 10. DISPLAY RESULTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("BASELINE MODEL PERFORMANCE")
+
+print("=" * 70)
+
+
+
+print(
+
+    results_df.to_string(
+
+        index=False,
+
+        float_format=lambda x: f"{x:.2f}"
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 11. BEST BASELINE
+
+# ============================================================
+
+
+
+best_model = (
+
+    results_df
+
+    .sort_values("WAPE")
+
+    .iloc[0]
+
+)
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST BASELINE MODEL")
+
+print("=" * 70)
+
+
+
+print("Model :", best_model["model"])
+
+print("MAE   :", round(best_model["MAE"], 2))
+
+print("RMSE  :", round(best_model["RMSE"], 2))
+
+print("MAPE  :", round(best_model["MAPE"], 2), "%")
+
+print("WAPE  :", round(best_model["WAPE"], 2), "%")
+
+
+
+
+
+# ============================================================
+
+# 12. SAMPLE FORECASTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("SAMPLE FORECAST RESULTS")
+
+print("=" * 70)
+
+
+
+sample = test[
+
+    [
+
+        "date",
+
+        "units_sold",
+
+        "naive_forecast",
+
+        "seasonal_naive_7",
+
+        "moving_average_7"
+
+    ]
+
+].head(15)
+
+
+
+print(sample.to_string(index=False))
+
+
+
+
+
+# ============================================================
+
+# 13. SAVE RESULTS
+
+# ============================================================
+
+
+
+OUTPUT_DIR = (
+
+    BASE_DIR
+
+    / "data"
+
+    / "processed"
+
+    / "forecasting"
+
+)
+
+
+
+OUTPUT_DIR.mkdir(
+
+    parents=True,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+RESULT_PATH = (
+
+    OUTPUT_DIR
+
+    / "baseline_model_results.csv"
+
+)
+
+
+
+results_df.to_csv(
+
+    RESULT_PATH,
+
+    index=False
+
+)
+
+
+
+
+
+FORECAST_PATH = (
+
+    OUTPUT_DIR
+
+    / "baseline_forecasts.csv"
+
+)
+
+
+
+test[
+
+    [
+
+        "date",
+
+        "units_sold",
+
+        "naive_forecast",
+
+        "seasonal_naive_7",
+
+        "moving_average_7"
+
+    ]
+
+].to_csv(
+
+    FORECAST_PATH,
+
+    index=False
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("BASELINE FORECASTING COMPLETED")
+
+print("=" * 70)
+
+
+
+print("\nResults saved to:")
+
+print(RESULT_PATH)
+
+
+
+print("\nForecasts saved to:")
+
+print(FORECAST_PATH)
+
+
+
+ml_forecasting.py  -->
+
+import pandas as pd
+
+import numpy as np
+
+from pathlib import Path
+
+
+
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - MACHINE LEARNING DEMAND FORECASTING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. LOAD DATA
+
+# ============================================================
+
+
+
+print("\nLoading forecasting dataset...")
+
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+
+
+DATA_PATH = (
+
+    BASE_DIR
+
+    / "data"
+
+    / "processed"
+
+    / "forecasting"
+
+    / "daily_forecasting_dataset.csv"
+
+)
+
+
+
+df = pd.read_csv(DATA_PATH)
+
+
+
+df["date"] = pd.to_datetime(df["date"])
+
+
+
+df = df.sort_values("date").reset_index(drop=True)
+
+
+
+print("Dataset loaded successfully!")
+
+print("Shape:", df.shape)
+
+
+
+
+
+# ============================================================
+
+# 2. FEATURES
+
+# ============================================================
+
+
+
+features = [
+
+    "avg_discount",
+
+    "promotion_flag",
+
+
+
+    "year",
+
+    "month",
+
+    "quarter",
+
+    "day_of_week",
+
+    "day_of_month",
+
+    "week_of_year",
+
+    "is_weekend",
+
+
+
+    "lag_1",
+
+    "lag_7",
+
+    "lag_14",
+
+    "lag_28",
+
+
+
+    "rolling_mean_7",
+
+    "rolling_mean_14",
+
+    "rolling_mean_28",
+
+
+
+    "rolling_std_7",
+
+    "rolling_std_28"
+
+]
+
+
+
+target = "units_sold"
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("FEATURES")
+
+print("=" * 70)
+
+
+
+print(features)
+
+
+
+
+
+# ============================================================
+
+# 3. REMOVE ROWS WITH LAG NA VALUES
+
+# ============================================================
+
+
+
+model_df = df.dropna(
+
+    subset=features + [target]
+
+).copy()
+
+
+
+print("\nRows after removing missing feature values:")
+
+print(len(model_df))
+
+
+
+
+
+# ============================================================
+
+# 4. TIME-BASED TRAIN / TEST SPLIT
+
+# ============================================================
+
+
+
+TEST_DAYS = 90
+
+
+
+train = model_df.iloc[:-TEST_DAYS].copy()
+
+test = model_df.iloc[-TEST_DAYS:].copy()
+
+
+
+
+
+X_train = train[features]
+
+y_train = train[target]
+
+
+
+X_test = test[features]
+
+y_test = test[target]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAIN / TEST SPLIT")
+
+print("=" * 70)
+
+
+
+print("Training rows:", len(train))
+
+print("Testing rows :", len(test))
+
+
+
+print(
+
+    "\nTraining period:",
+
+    train["date"].min(),
+
+    "to",
+
+    train["date"].max()
+
+)
+
+
+
+print(
+
+    "Testing period :",
+
+    test["date"].min(),
+
+    "to",
+
+    test["date"].max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 5. RANDOM FOREST MODEL
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING RANDOM FOREST")
+
+print("=" * 70)
+
+
+
+model = RandomForestRegressor(
+
+    n_estimators=300,
+
+    max_depth=12,
+
+    min_samples_leaf=3,
+
+    random_state=42,
+
+    n_jobs=-1
+
+)
+
+
+
+model.fit(
+
+    X_train,
+
+    y_train
+
+)
+
+
+
+print("Random Forest training completed!")
+
+
+
+
+
+# ============================================================
+
+# 6. PREDICTIONS
+
+# ============================================================
+
+
+
+predictions = model.predict(X_test)
+
+
+
+# Demand cannot be negative
+
+predictions = np.maximum(
+
+    predictions,
+
+    0
+
+)
+
+
+
+test["rf_forecast"] = predictions
+
+
+
+
+
+# ============================================================
+
+# 7. EVALUATION
+
+# ============================================================
+
+
+
+actual = y_test.values
+
+predicted = predictions
+
+
+
+
+
+mae = mean_absolute_error(
+
+    actual,
+
+    predicted
+
+)
+
+
+
+rmse = np.sqrt(
+
+    mean_squared_error(
+
+        actual,
+
+        predicted
+
+    )
+
+)
+
+
+
+non_zero = actual != 0
+
+
+
+mape = np.mean(
+
+    np.abs(
+
+        (actual[non_zero] - predicted[non_zero])
+
+        / actual[non_zero]
+
+    )
+
+) * 100
+
+
+
+wape = (
+
+    np.sum(
+
+        np.abs(
+
+            actual - predicted
+
+        )
+
+    )
+
+    /
+
+    np.sum(
+
+        np.abs(actual)
+
+    )
+
+) * 100
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("RANDOM FOREST PERFORMANCE")
+
+print("=" * 70)
+
+
+
+print(f"MAE  : {mae:.2f}")
+
+print(f"RMSE : {rmse:.2f}")
+
+print(f"MAPE : {mape:.2f}%")
+
+print(f"WAPE : {wape:.2f}%")
+
+
+
+
+
+# ============================================================
+
+# 8. COMPARE WITH BASELINE
+
+# ============================================================
+
+
+
+baseline_path = (
+
+    BASE_DIR
+
+    / "data"
+
+    / "processed"
+
+    / "forecasting"
+
+    / "baseline_model_results.csv"
+
+)
+
+
+
+baseline = pd.read_csv(
+
+    baseline_path
+
+)
+
+
+
+rf_result = pd.DataFrame({
+
+    "model": ["Random Forest"],
+
+    "MAE": [mae],
+
+    "RMSE": [rmse],
+
+    "MAPE": [mape],
+
+    "WAPE": [wape]
+
+})
+
+
+
+comparison = pd.concat(
+
+    [
+
+        baseline,
+
+        rf_result
+
+    ],
+
+    ignore_index=True
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("MODEL COMPARISON")
+
+print("=" * 70)
+
+
+
+print(
+
+    comparison.to_string(
+
+        index=False,
+
+        float_format=lambda x: f"{x:.2f}"
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 9. FEATURE IMPORTANCE
+
+# ============================================================
+
+
+
+importance = pd.DataFrame({
+
+    "feature": features,
+
+    "importance": model.feature_importances_
+
+})
+
+
+
+importance = importance.sort_values(
+
+    "importance",
+
+    ascending=False
+
+).reset_index(drop=True)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("FEATURE IMPORTANCE")
+
+print("=" * 70)
+
+
+
+print(
+
+    importance.to_string(
+
+        index=False,
+
+        float_format=lambda x: f"{x:.4f}"
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 10. SAMPLE FORECASTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("SAMPLE RANDOM FOREST FORECASTS")
+
+print("=" * 70)
+
+
+
+sample = test[
+
+    [
+
+        "date",
+
+        "units_sold",
+
+        "rf_forecast"
+
+    ]
+
+].head(20)
+
+
+
+print(
+
+    sample.to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 11. SAVE RESULTS
+
+# ============================================================
+
+
+
+OUTPUT_DIR = (
+
+    BASE_DIR
+
+    / "data"
+
+    / "processed"
+
+    / "forecasting"
+
+)
+
+
+
+OUTPUT_DIR.mkdir(
+
+    parents=True,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+comparison_path = (
+
+    OUTPUT_DIR
+
+    / "model_comparison.csv"
+
+)
+
+
+
+comparison.to_csv(
+
+    comparison_path,
+
+    index=False
+
+)
+
+
+
+
+
+importance_path = (
+
+    OUTPUT_DIR
+
+    / "feature_importance.csv"
+
+)
+
+
+
+importance.to_csv(
+
+    importance_path,
+
+    index=False
+
+)
+
+
+
+
+
+forecast_path = (
+
+    OUTPUT_DIR
+
+    / "random_forest_forecasts.csv"
+
+)
+
+
+
+test[
+
+    [
+
+        "date",
+
+        "units_sold",
+
+        "rf_forecast"
+
+    ]
+
+].to_csv(
+
+    forecast_path,
+
+    index=False
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("MACHINE LEARNING FORECASTING COMPLETED")
+
+print("=" * 70)
+
+
+
+print("\nModel comparison saved to:")
+
+print(comparison_path)
+
+
+
+print("\nFeature importance saved to:")
+
+print(importance_path)
+
+
+
+print("\nForecasts saved to:")
+
+print(forecast_path)
+
+
+
+advanced_ml_forecasting.py -->
+
+import os
+
+import warnings
+
+import numpy as np
+
+import pandas as pd
+
+
+
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+from xgboost import XGBRegressor
+
+from lightgbm import LGBMRegressor
+
+
+
+warnings.filterwarnings("ignore")
+
+
+
+
+
+# ============================================================
+
+# PROJECT FORESIGHT - ADVANCED ML FORECASTING
+
+# ============================================================
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - ADVANCED ML FORECASTING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# PATHS
+
+# ============================================================
+
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+INPUT_FILE = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting",
+
+    "daily_forecasting_dataset.csv"
+
+)
+
+
+
+OUTPUT_DIR = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting"
+
+)
+
+
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+
+
+
+# ============================================================
+
+# LOAD DATA
+
+# ============================================================
+
+
+
+print("\nLoading forecasting dataset...")
+
+
+
+df = pd.read_csv(INPUT_FILE)
+
+
+
+df["date"] = pd.to_datetime(df["date"])
+
+
+
+df = df.sort_values("date").reset_index(drop=True)
+
+
+
+print("Dataset loaded successfully!")
+
+print("Shape:", df.shape)
+
+
+
+
+
+# ============================================================
+
+# ADD ADVANCED FEATURES
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("CREATING ADVANCED FEATURES")
+
+print("=" * 70)
+
+
+
+# Time trend
+
+df["trend"] = np.arange(len(df))
+
+
+
+# Cyclical month features
+
+df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+
+df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+
+
+
+# Cyclical day-of-week features
+
+df["day_of_week_sin"] = np.sin(
+
+    2 * np.pi * df["day_of_week"] / 7
+
+)
+
+
+
+df["day_of_week_cos"] = np.cos(
+
+    2 * np.pi * df["day_of_week"] / 7
+
+)
+
+
+
+# Additional lag features
+
+for lag in [2, 3, 21, 56]:
+
+    df[f"lag_{lag}"] = df["units_sold"].shift(lag)
+
+
+
+# Additional rolling features
+
+df["rolling_mean_56"] = (
+
+    df["units_sold"]
+
+    .shift(1)
+
+    .rolling(window=56)
+
+    .mean()
+
+)
+
+
+
+df["rolling_std_14"] = (
+
+    df["units_sold"]
+
+    .shift(1)
+
+    .rolling(window=14)
+
+    .std()
+
+)
+
+
+
+print("Advanced features created.")
+
+
+
+
+
+# ============================================================
+
+# FEATURE LIST
+
+# ============================================================
+
+
+
+features = [
+
+    "avg_discount",
+
+    "promotion_flag",
+
+
+
+    "year",
+
+    "month",
+
+    "quarter",
+
+    "day_of_week",
+
+    "day_of_month",
+
+    "week_of_year",
+
+    "is_weekend",
+
+
+
+    "trend",
+
+
+
+    "month_sin",
+
+    "month_cos",
+
+    "day_of_week_sin",
+
+    "day_of_week_cos",
+
+
+
+    "lag_1",
+
+    "lag_2",
+
+    "lag_3",
+
+    "lag_7",
+
+    "lag_14",
+
+    "lag_21",
+
+    "lag_28",
+
+    "lag_56",
+
+
+
+    "rolling_mean_7",
+
+    "rolling_mean_14",
+
+    "rolling_mean_28",
+
+    "rolling_mean_56",
+
+
+
+    "rolling_std_7",
+
+    "rolling_std_14",
+
+    "rolling_std_28"
+
+]
+
+
+
+target = "units_sold"
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("FEATURES")
+
+print("=" * 70)
+
+
+
+print(features)
+
+
+
+
+
+# ============================================================
+
+# REMOVE MISSING VALUES
+
+# ============================================================
+
+
+
+model_df = df.dropna(
+
+    subset=features + [target]
+
+).copy()
+
+
+
+print("\nRows after removing missing feature values:")
+
+print(len(model_df))
+
+
+
+
+
+# ============================================================
+
+# TRAIN / TEST SPLIT
+
+# ============================================================
+
+
+
+TEST_DAYS = 90
+
+
+
+train = model_df.iloc[:-TEST_DAYS].copy()
+
+test = model_df.iloc[-TEST_DAYS:].copy()
+
+
+
+X_train = train[features]
+
+y_train = train[target]
+
+
+
+X_test = test[features]
+
+y_test = test[target]
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAIN / TEST SPLIT")
+
+print("=" * 70)
+
+
+
+print("Training rows:", len(train))
+
+print("Testing rows :", len(test))
+
+
+
+print(
+
+    "\nTraining period:",
+
+    train["date"].min(),
+
+    "to",
+
+    train["date"].max()
+
+)
+
+
+
+print(
+
+    "Testing period :",
+
+    test["date"].min(),
+
+    "to",
+
+    test["date"].max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# METRIC FUNCTION
+
+# ============================================================
+
+
+
+def calculate_metrics(actual, predicted):
+
+
+
+    actual = np.array(actual)
+
+    predicted = np.array(predicted)
+
+
+
+    mae = mean_absolute_error(actual, predicted)
+
+
+
+    rmse = np.sqrt(
+
+        mean_squared_error(actual, predicted)
+
+    )
+
+
+
+    # Avoid division by zero
+
+    non_zero = actual != 0
+
+
+
+    if non_zero.sum() > 0:
+
+        mape = np.mean(
+
+            np.abs(
+
+                (actual[non_zero] - predicted[non_zero])
+
+                / actual[non_zero]
+
+            )
+
+        ) * 100
+
+    else:
+
+        mape = np.nan
+
+
+
+    wape = (
+
+        np.sum(np.abs(actual - predicted))
+
+        / np.sum(np.abs(actual))
+
+    ) * 100
+
+
+
+    return mae, rmse, mape, wape
+
+
+
+
+
+# ============================================================
+
+# RANDOM FOREST
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING RANDOM FOREST")
+
+print("=" * 70)
+
+
+
+rf_model = RandomForestRegressor(
+
+    n_estimators=300,
+
+    max_depth=18,
+
+    min_samples_leaf=2,
+
+    max_features="sqrt",
+
+    random_state=42,
+
+    n_jobs=-1
+
+)
+
+
+
+rf_model.fit(X_train, y_train)
+
+
+
+rf_pred = rf_model.predict(X_test)
+
+
+
+rf_mae, rf_rmse, rf_mape, rf_wape = calculate_metrics(
+
+    y_test,
+
+    rf_pred
+
+)
+
+
+
+print("Random Forest completed.")
+
+
+
+
+
+# ============================================================
+
+# XGBOOST
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING XGBOOST")
+
+print("=" * 70)
+
+
+
+xgb_model = XGBRegressor(
+
+    n_estimators=500,
+
+    learning_rate=0.05,
+
+    max_depth=6,
+
+    min_child_weight=3,
+
+    subsample=0.8,
+
+    colsample_bytree=0.8,
+
+    objective="reg:squarederror",
+
+    random_state=42,
+
+    n_jobs=-1
+
+)
+
+
+
+xgb_model.fit(
+
+    X_train,
+
+    y_train
+
+)
+
+
+
+xgb_pred = xgb_model.predict(X_test)
+
+
+
+xgb_mae, xgb_rmse, xgb_mape, xgb_wape = calculate_metrics(
+
+    y_test,
+
+    xgb_pred
+
+)
+
+
+
+print("XGBoost completed.")
+
+
+
+
+
+# ============================================================
+
+# LIGHTGBM
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING LIGHTGBM")
+
+print("=" * 70)
+
+
+
+lgb_model = LGBMRegressor(
+
+    n_estimators=500,
+
+    learning_rate=0.05,
+
+    max_depth=8,
+
+    num_leaves=31,
+
+    subsample=0.8,
+
+    colsample_bytree=0.8,
+
+    random_state=42,
+
+    n_jobs=-1,
+
+    verbosity=-1
+
+)
+
+
+
+lgb_model.fit(
+
+    X_train,
+
+    y_train
+
+)
+
+
+
+lgb_pred = lgb_model.predict(X_test)
+
+
+
+lgb_mae, lgb_rmse, lgb_mape, lgb_wape = calculate_metrics(
+
+    y_test,
+
+    lgb_pred
+
+)
+
+
+
+print("LightGBM completed.")
+
+
+
+
+
+# ============================================================
+
+# MODEL COMPARISON
+
+# ============================================================
+
+
+
+comparison = pd.DataFrame({
+
+
+
+    "model": [
+
+        "Random Forest",
+
+        "XGBoost",
+
+        "LightGBM"
+
+    ],
+
+
+
+    "MAE": [
+
+        rf_mae,
+
+        xgb_mae,
+
+        lgb_mae
+
+    ],
+
+
+
+    "RMSE": [
+
+        rf_rmse,
+
+        xgb_rmse,
+
+        lgb_rmse
+
+    ],
+
+
+
+    "MAPE": [
+
+        rf_mape,
+
+        xgb_mape,
+
+        lgb_mape
+
+    ],
+
+
+
+    "WAPE": [
+
+        rf_wape,
+
+        xgb_wape,
+
+        lgb_wape
+
+    ]
+
+})
+
+
+
+comparison = comparison.sort_values(
+
+    "WAPE"
+
+).reset_index(drop=True)
+
+
+
+
+
+# ============================================================
+
+# DISPLAY RESULTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("ADVANCED MODEL COMPARISON")
+
+print("=" * 70)
+
+
+
+print(
+
+    comparison.to_string(
+
+        index=False,
+
+        float_format=lambda x: f"{x:.2f}"
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# BEST MODEL
+
+# ============================================================
+
+
+
+best_model_name = comparison.iloc[0]["model"]
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST ADVANCED MODEL")
+
+print("=" * 70)
+
+
+
+print("Model :", best_model_name)
+
+print("MAE   :", round(comparison.iloc[0]["MAE"], 2))
+
+print("RMSE  :", round(comparison.iloc[0]["RMSE"], 2))
+
+print("MAPE  :", round(comparison.iloc[0]["MAPE"], 2), "%")
+
+print("WAPE  :", round(comparison.iloc[0]["WAPE"], 2), "%")
+
+
+
+
+
+# ============================================================
+
+# FORECAST OUTPUT
+
+# ============================================================
+
+
+
+forecast_output = test[
+
+    ["date", "units_sold"]
+
+].copy()
+
+
+
+forecast_output["rf_forecast"] = rf_pred
+
+forecast_output["xgb_forecast"] = xgb_pred
+
+forecast_output["lgb_forecast"] = lgb_pred
+
+
+
+forecast_output["rf_error"] = (
+
+    forecast_output["units_sold"]
+
+    - forecast_output["rf_forecast"]
+
+)
+
+
+
+forecast_output["xgb_error"] = (
+
+    forecast_output["units_sold"]
+
+    - forecast_output["xgb_forecast"]
+
+)
+
+
+
+forecast_output["lgb_error"] = (
+
+    forecast_output["units_sold"]
+
+    - forecast_output["lgb_forecast"]
+
+)
+
+
+
+
+
+# ============================================================
+
+# FEATURE IMPORTANCE
+
+# ============================================================
+
+
+
+rf_importance = pd.DataFrame({
+
+    "feature": features,
+
+    "random_forest_importance":
+
+        rf_model.feature_importances_
+
+})
+
+
+
+xgb_importance = pd.DataFrame({
+
+    "feature": features,
+
+    "xgboost_importance":
+
+        xgb_model.feature_importances_
+
+})
+
+
+
+lgb_importance = pd.DataFrame({
+
+    "feature": features,
+
+    "lightgbm_importance":
+
+        lgb_model.feature_importances_
+
+})
+
+
+
+feature_importance = (
+
+    rf_importance
+
+    .merge(
+
+        xgb_importance,
+
+        on="feature"
+
+    )
+
+    .merge(
+
+        lgb_importance,
+
+        on="feature"
+
+    )
+
+)
+
+
+
+feature_importance["average_importance"] = (
+
+    feature_importance[
+
+        [
+
+            "random_forest_importance",
+
+            "xgboost_importance",
+
+            "lightgbm_importance"
+
+        ]
+
+    ].mean(axis=1)
+
+)
+
+
+
+feature_importance = feature_importance.sort_values(
+
+    "average_importance",
+
+    ascending=False
+
+).reset_index(drop=True)
+
+
+
+
+
+# ============================================================
+
+# SAVE FILES
+
+# ============================================================
+
+
+
+comparison_file = os.path.join(
+
+    OUTPUT_DIR,
+
+    "advanced_model_comparison.csv"
+
+)
+
+
+
+forecast_file = os.path.join(
+
+    OUTPUT_DIR,
+
+    "advanced_model_forecasts.csv"
+
+)
+
+
+
+importance_file = os.path.join(
+
+    OUTPUT_DIR,
+
+    "advanced_feature_importance.csv"
+
+)
+
+
+
+comparison.to_csv(
+
+    comparison_file,
+
+    index=False
+
+)
+
+
+
+forecast_output.to_csv(
+
+    forecast_file,
+
+    index=False
+
+)
+
+
+
+feature_importance.to_csv(
+
+    importance_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# SAMPLE FORECASTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("SAMPLE ADVANCED FORECASTS")
+
+print("=" * 70)
+
+
+
+print(
+
+    forecast_output.head(20).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# TOP FEATURES
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP DEMAND PREDICTORS")
+
+print("=" * 70)
+
+
+
+print(
+
+    feature_importance.head(15).to_string(
+
+        index=False,
+
+        float_format=lambda x: f"{x:.4f}"
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# COMPLETED
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("ADVANCED ML FORECASTING COMPLETED")
+
+print("=" * 70)
+
+
+
+print("\nFiles saved to:")
+
+print(comparison_file)
+
+print(forecast_file)
+
+print(importance_file)
+
+
+
+arima_sarima_forecasting.py -->
+
+import os
+
+import warnings
+
+
+
+import pandas as pd
+
+import numpy as np
+
+
+
+from sklearn.metrics import (
+
+    mean_absolute_error,
+
+    mean_squared_error
+
+)
+
+
+
+from statsmodels.tsa.arima.model import ARIMA
+
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+
+
+
+
+warnings.filterwarnings("ignore")
+
+
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - ARIMA & SARIMA FORECASTING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. PATHS
+
+# ============================================================
+
+
+
+BASE_DIR = os.path.dirname(
+
+    os.path.dirname(
+
+        os.path.abspath(__file__)
+
+    )
+
+)
+
+
+
+FORECAST_DIR = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting"
+
+)
+
+
+
+ARIMA_DIR = os.path.join(
+
+    FORECAST_DIR,
+
+    "arima_sarima"
+
+)
+
+
+
+os.makedirs(
+
+    ARIMA_DIR,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+# ============================================================
+
+# 2. LOAD FORECASTING DATASET
+
+# ============================================================
+
+
+
+print("\nLoading forecasting dataset...")
+
+
+
+forecast_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "daily_forecasting_dataset.csv"
+
+)
+
+
+
+df = pd.read_csv(
+
+    forecast_file
+
+)
+
+
+
+df["date"] = pd.to_datetime(
+
+    df["date"],
+
+    errors="coerce"
+
+)
+
+
+
+df = df.sort_values(
+
+    "date"
+
+)
+
+
+
+
+
+print("Dataset loaded successfully!")
+
+
+
+print(
+
+    "Shape:",
+
+    df.shape
+
+)
+
+
+
+print(
+
+    "Historical period:",
+
+    df["date"].min(),
+
+    "to",
+
+    df["date"].max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 3. PREPARE TIME SERIES
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("PREPARING TIME SERIES")
+
+print("=" * 70)
+
+
+
+
+
+time_series = (
+
+    df[
+
+        [
+
+            "date",
+
+            "units_sold"
+
+        ]
+
+    ]
+
+    .groupby(
+
+        "date",
+
+        as_index=False
+
+    )["units_sold"]
+
+    .sum()
+
+)
+
+
+
+
+
+time_series = time_series.set_index(
+
+    "date"
+
+)
+
+
+
+
+
+time_series = time_series.asfreq(
+
+    "D"
+
+)
+
+
+
+
+
+# Fill missing demand dates if any
+
+time_series["units_sold"] = (
+
+    time_series["units_sold"]
+
+    .fillna(0)
+
+)
+
+
+
+
+
+y = time_series[
+
+    "units_sold"
+
+]
+
+
+
+
+
+print(
+
+    "Time-series observations:",
+
+    len(y)
+
+)
+
+
+
+print(
+
+    "Start:",
+
+    y.index.min()
+
+)
+
+
+
+print(
+
+    "End:",
+
+    y.index.max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 4. TRAIN / TEST SPLIT
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAIN / TEST SPLIT")
+
+print("=" * 70)
+
+
+
+
+
+test_size = 90
+
+
+
+
+
+train = y.iloc[:-test_size]
+
+
+
+test = y.iloc[-test_size:]
+
+
+
+
+
+print(
+
+    "Training observations:",
+
+    len(train)
+
+)
+
+
+
+print(
+
+    "Testing observations:",
+
+    len(test)
+
+)
+
+
+
+print(
+
+    "Training period:",
+
+    train.index.min(),
+
+    "to",
+
+    train.index.max()
+
+)
+
+
+
+print(
+
+    "Testing period:",
+
+    test.index.min(),
+
+    "to",
+
+    test.index.max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 5. METRICS FUNCTION
+
+# ============================================================
+
+
+
+def calculate_metrics(
+
+    actual,
+
+    predicted
+
+):
+
+
+
+    mae = mean_absolute_error(
+
+        actual,
+
+        predicted
+
+    )
+
+
+
+    rmse = np.sqrt(
+
+        mean_squared_error(
+
+            actual,
+
+            predicted
+
+        )
+
+    )
+
+
+
+    non_zero = actual != 0
+
+
+
+    if non_zero.sum() > 0:
+
+
+
+        mape = (
+
+            np.mean(
+
+                np.abs(
+
+                    (
+
+                        actual[non_zero]
+
+                        -
+
+                        predicted[non_zero]
+
+                    )
+
+                    /
+
+                    actual[non_zero]
+
+                )
+
+            )
+
+            * 100
+
+        )
+
+
+
+    else:
+
+
+
+        mape = np.nan
+
+
+
+
+
+    wape = (
+
+        np.sum(
+
+            np.abs(
+
+                actual - predicted
+
+            )
+
+        )
+
+        /
+
+        np.sum(
+
+            np.abs(actual)
+
+        )
+
+    ) * 100
+
+
+
+
+
+    return (
+
+        mae,
+
+        rmse,
+
+        mape,
+
+        wape
+
+    )
+
+
+
+
+
+# ============================================================
+
+# 6. ARIMA
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING ARIMA")
+
+print("=" * 70)
+
+
+
+
+
+arima_order = (
+
+    5,
+
+    1,
+
+    2
+
+)
+
+
+
+
+
+print(
+
+    "ARIMA order:",
+
+    arima_order
+
+)
+
+
+
+
+
+arima_model = ARIMA(
+
+    train,
+
+    order=arima_order
+
+)
+
+
+
+
+
+arima_result = arima_model.fit()
+
+
+
+
+
+arima_forecast = (
+
+    arima_result
+
+    .forecast(
+
+        steps=test_size
+
+    )
+
+)
+
+
+
+
+
+arima_forecast.index = test.index
+
+
+
+
+
+print(
+
+    "ARIMA completed."
+
+)
+
+
+
+
+
+# ============================================================
+
+# 7. SARIMA
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING SARIMA")
+
+print("=" * 70)
+
+
+
+
+
+sarima_order = (
+
+    1,
+
+    1,
+
+    1
+
+)
+
+
+
+seasonal_order = (
+
+    1,
+
+    1,
+
+    1,
+
+    7
+
+)
+
+
+
+
+
+print(
+
+    "SARIMA order:",
+
+    sarima_order
+
+)
+
+
+
+print(
+
+    "Seasonal order:",
+
+    seasonal_order
+
+)
+
+
+
+
+
+sarima_model = SARIMAX(
+
+    train,
+
+    order=sarima_order,
+
+    seasonal_order=seasonal_order,
+
+    enforce_stationarity=False,
+
+    enforce_invertibility=False
+
+)
+
+
+
+
+
+sarima_result = sarima_model.fit(
+
+    disp=False
+
+)
+
+
+
+
+
+sarima_forecast = (
+
+    sarima_result
+
+    .forecast(
+
+        steps=test_size
+
+    )
+
+)
+
+
+
+
+
+sarima_forecast.index = test.index
+
+
+
+
+
+print(
+
+    "SARIMA completed."
+
+)
+
+
+
+
+
+# ============================================================
+
+# 8. MODEL METRICS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("ARIMA / SARIMA MODEL COMPARISON")
+
+print("=" * 70)
+
+
+
+
+
+arima_metrics = calculate_metrics(
+
+    test,
+
+    arima_forecast
+
+)
+
+
+
+
+
+sarima_metrics = calculate_metrics(
+
+    test,
+
+    sarima_forecast
+
+)
+
+
+
+
+
+comparison = pd.DataFrame({
+
+
+
+    "model": [
+
+        "ARIMA",
+
+        "SARIMA"
+
+    ],
+
+
+
+    "MAE": [
+
+        arima_metrics[0],
+
+        sarima_metrics[0]
+
+    ],
+
+
+
+    "RMSE": [
+
+        arima_metrics[1],
+
+        sarima_metrics[1]
+
+    ],
+
+
+
+    "MAPE": [
+
+        arima_metrics[2],
+
+        sarima_metrics[2]
+
+    ],
+
+
+
+    "WAPE": [
+
+        arima_metrics[3],
+
+        sarima_metrics[3]
+
+    ]
+
+
+
+})
+
+
+
+
+
+print(
+
+    comparison
+
+    .round(2)
+
+    .to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 9. BEST STATISTICAL MODEL
+
+# ============================================================
+
+
+
+best_model = comparison.loc[
+
+    comparison["MAE"].idxmin()
+
+]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST STATISTICAL MODEL")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "Model:",
+
+    best_model["model"]
+
+)
+
+
+
+print(
+
+    "MAE:",
+
+    round(
+
+        best_model["MAE"],
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "RMSE:",
+
+    round(
+
+        best_model["RMSE"],
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "MAPE:",
+
+    round(
+
+        best_model["MAPE"],
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+print(
+
+    "WAPE:",
+
+    round(
+
+        best_model["WAPE"],
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 10. SAVE FORECAST RESULTS
+
+# ============================================================
+
+
+
+forecast_results = pd.DataFrame({
+
+
+
+    "date": test.index,
+
+
+
+    "actual_units": test.values,
+
+
+
+    "arima_forecast": (
+
+        arima_forecast.values
+
+    ),
+
+
+
+    "sarima_forecast": (
+
+        sarima_forecast.values
+
+    )
+
+
+
+})
+
+
+
+
+
+forecast_results["arima_error"] = (
+
+    forecast_results["actual_units"]
+
+    -
+
+    forecast_results["arima_forecast"]
+
+)
+
+
+
+
+
+forecast_results["sarima_error"] = (
+
+    forecast_results["actual_units"]
+
+    -
+
+    forecast_results["sarima_forecast"]
+
+)
+
+
+
+
+
+forecast_file = os.path.join(
+
+    ARIMA_DIR,
+
+    "arima_sarima_forecasts.csv"
+
+)
+
+
+
+
+
+forecast_results.to_csv(
+
+    forecast_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 11. SAVE MODEL COMPARISON
+
+# ============================================================
+
+
+
+comparison_file = os.path.join(
+
+    ARIMA_DIR,
+
+    "arima_sarima_comparison.csv"
+
+)
+
+
+
+
+
+comparison.to_csv(
+
+    comparison_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 12. FINAL OUTPUT
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("ARIMA & SARIMA FORECASTING COMPLETED")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nFiles saved to:"
+
+)
+
+
+
+print(
+
+    ARIMA_DIR
+
+)
+
+
+
+
+
+print(
+
+    "\nGenerated files:"
+
+)
+
+
+
+print(
+
+    "1. arima_sarima_forecasts.csv"
+
+)
+
+
+
+print(
+
+    "2. arima_sarima_comparison.csv"
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+
+
+arima_sarima_tuning.py -->
+
+import os
+
+import warnings
+
+
+
+import pandas as pd
+
+import numpy as np
+
+
+
+from sklearn.metrics import (
+
+    mean_absolute_error,
+
+    mean_squared_error
+
+)
+
+
+
+from statsmodels.tsa.arima.model import ARIMA
+
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+
+
+
+
+warnings.filterwarnings("ignore")
+
+
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - ARIMA / SARIMA MODEL TUNING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. PATHS
+
+# ============================================================
+
+
+
+BASE_DIR = os.path.dirname(
+
+    os.path.dirname(
+
+        os.path.abspath(__file__)
+
+    )
+
+)
+
+
+
+FORECAST_DIR = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 2. LOAD DATA
+
+# ============================================================
+
+
+
+print("\nLoading forecasting dataset...")
+
+
+
+file_path = os.path.join(
+
+    FORECAST_DIR,
+
+    "daily_forecasting_dataset.csv"
+
+)
+
+
+
+df = pd.read_csv(
+
+    file_path
+
+)
+
+
+
+df["date"] = pd.to_datetime(
+
+    df["date"],
+
+    errors="coerce"
+
+)
+
+
+
+df = df.sort_values(
+
+    "date"
+
+)
+
+
+
+
+
+print(
+
+    "Dataset shape:",
+
+    df.shape
+
+)
+
+
+
+
+
+# ============================================================
+
+# 3. PREPARE DAILY TIME SERIES
+
+# ============================================================
+
+
+
+daily = (
+
+    df[
+
+        [
+
+            "date",
+
+            "units_sold"
+
+        ]
+
+    ]
+
+    .groupby(
+
+        "date",
+
+        as_index=False
+
+    )["units_sold"]
+
+    .sum()
+
+)
+
+
+
+
+
+daily = daily.set_index(
+
+    "date"
+
+)
+
+
+
+
+
+daily = daily.asfreq(
+
+    "D"
+
+)
+
+
+
+
+
+daily["units_sold"] = (
+
+    daily["units_sold"]
+
+    .fillna(0)
+
+)
+
+
+
+
+
+y = daily["units_sold"]
+
+
+
+
+
+print(
+
+    "Time-series observations:",
+
+    len(y)
+
+)
+
+
+
+
+
+# ============================================================
+
+# 4. TRAIN / TEST SPLIT
+
+# ============================================================
+
+
+
+TEST_SIZE = 90
+
+
+
+
+
+train = y.iloc[:-TEST_SIZE]
+
+
+
+test = y.iloc[-TEST_SIZE:]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAIN / TEST SPLIT")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "Training:",
+
+    train.index.min(),
+
+    "to",
+
+    train.index.max()
+
+)
+
+
+
+print(
+
+    "Testing:",
+
+    test.index.min(),
+
+    "to",
+
+    test.index.max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 5. METRICS
+
+# ============================================================
+
+
+
+def calculate_metrics(
+
+    actual,
+
+    predicted
+
+):
+
+
+
+    actual = np.asarray(actual)
+
+
+
+    predicted = np.asarray(predicted)
+
+
+
+
+
+    mae = mean_absolute_error(
+
+        actual,
+
+        predicted
+
+    )
+
+
+
+
+
+    rmse = np.sqrt(
+
+        mean_squared_error(
+
+            actual,
+
+            predicted
+
+        )
+
+    )
+
+
+
+
+
+    non_zero = actual != 0
+
+
+
+
+
+    if non_zero.sum() > 0:
+
+
+
+        mape = (
+
+            np.mean(
+
+                np.abs(
+
+                    (
+
+                        actual[non_zero]
+
+                        -
+
+                        predicted[non_zero]
+
+                    )
+
+                    /
+
+                    actual[non_zero]
+
+                )
+
+            )
+
+            * 100
+
+        )
+
+
+
+    else:
+
+
+
+        mape = np.nan
+
+
+
+
+
+    denominator = np.sum(
+
+        np.abs(actual)
+
+    )
+
+
+
+
+
+    if denominator != 0:
+
+
+
+        wape = (
+
+            np.sum(
+
+                np.abs(
+
+                    actual - predicted
+
+                )
+
+            )
+
+            /
+
+            denominator
+
+        ) * 100
+
+
+
+    else:
+
+
+
+        wape = np.nan
+
+
+
+
+
+    return (
+
+        mae,
+
+        rmse,
+
+        mape,
+
+        wape
+
+    )
+
+
+
+
+
+# ============================================================
+
+# 6. ARIMA PARAMETER GRID
+
+# ============================================================
+
+
+
+arima_orders = [
+
+
+
+    (1, 0, 0),
+
+    (1, 1, 0),
+
+    (1, 1, 1),
+
+
+
+    (2, 0, 0),
+
+    (2, 1, 0),
+
+    (2, 1, 1),
+
+
+
+    (3, 0, 0),
+
+    (3, 1, 0),
+
+    (3, 1, 1),
+
+
+
+    (5, 1, 0),
+
+    (5, 1, 1),
+
+    (5, 1, 2)
+
+
+
+]
+
+
+
+
+
+# ============================================================
+
+# 7. SARIMA PARAMETER GRID
+
+# ============================================================
+
+
+
+sarima_orders = [
+
+
+
+    (1, 0, 0),
+
+    (1, 1, 0),
+
+    (1, 1, 1),
+
+
+
+    (2, 0, 0),
+
+    (2, 1, 0),
+
+    (2, 1, 1)
+
+
+
+]
+
+
+
+
+
+seasonal_orders = [
+
+
+
+    (1, 0, 0, 7),
+
+    (1, 1, 0, 7),
+
+    (1, 1, 1, 7),
+
+
+
+    (0, 1, 1, 7),
+
+
+
+    (2, 1, 1, 7)
+
+
+
+]
+
+
+
+
+
+# ============================================================
+
+# 8. RESULTS
+
+# ============================================================
+
+
+
+results = []
+
+
+
+
+
+# ============================================================
+
+# 9. ARIMA TUNING
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TUNING ARIMA")
+
+print("=" * 70)
+
+
+
+
+
+for order in arima_orders:
+
+
+
+    print(
+
+        f"Testing ARIMA{order}..."
+
+    )
+
+
+
+    try:
+
+
+
+        model = ARIMA(
+
+            train,
+
+            order=order
+
+        )
+
+
+
+        fitted = model.fit()
+
+
+
+
+
+        forecast = fitted.forecast(
+
+            steps=TEST_SIZE
+
+        )
+
+
+
+
+
+        metrics = calculate_metrics(
+
+            test,
+
+            forecast
+
+        )
+
+
+
+
+
+        results.append({
+
+
+
+            "model": "ARIMA",
+
+
+
+            "order": str(order),
+
+
+
+            "seasonal_order": "-",
+
+
+
+            "MAE": metrics[0],
+
+
+
+            "RMSE": metrics[1],
+
+
+
+            "MAPE": metrics[2],
+
+
+
+            "WAPE": metrics[3]
+
+
+
+        })
+
+
+
+
+
+        print(
+
+            f"MAE: {metrics[0]:.2f}"
+
+        )
+
+
+
+
+
+    except Exception as e:
+
+
+
+        print(
+
+            f"Failed ARIMA{order}: {e}"
+
+        )
+
+
+
+
+
+# ============================================================
+
+# 10. SARIMA TUNING
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TUNING SARIMA")
+
+print("=" * 70)
+
+
+
+
+
+for order in sarima_orders:
+
+
+
+    for seasonal_order in seasonal_orders:
+
+
+
+        print(
+
+            f"Testing SARIMA"
+
+            f"{order}"
+
+            f"x"
+
+            f"{seasonal_order}..."
+
+        )
+
+
+
+
+
+        try:
+
+
+
+            model = SARIMAX(
+
+
+
+                train,
+
+
+
+                order=order,
+
+
+
+                seasonal_order=seasonal_order,
+
+
+
+                enforce_stationarity=False,
+
+
+
+                enforce_invertibility=False
+
+
+
+            )
+
+
+
+
+
+            fitted = model.fit(
+
+                disp=False
+
+            )
+
+
+
+
+
+            forecast = fitted.forecast(
+
+                steps=TEST_SIZE
+
+            )
+
+
+
+
+
+            metrics = calculate_metrics(
+
+                test,
+
+                forecast
+
+            )
+
+
+
+
+
+            results.append({
+
+
+
+                "model": "SARIMA",
+
+
+
+                "order": str(order),
+
+
+
+                "seasonal_order":
+
+                    str(seasonal_order),
+
+
+
+                "MAE": metrics[0],
+
+
+
+                "RMSE": metrics[1],
+
+
+
+                "MAPE": metrics[2],
+
+
+
+                "WAPE": metrics[3]
+
+
+
+            })
+
+
+
+
+
+            print(
+
+                f"MAE: {metrics[0]:.2f}"
+
+            )
+
+
+
+
+
+        except Exception as e:
+
+
+
+            print(
+
+                "Failed:",
+
+                e
+
+            )
+
+
+
+
+
+# ============================================================
+
+# 11. CREATE RESULTS DATAFRAME
+
+# ============================================================
+
+
+
+results_df = pd.DataFrame(
+
+    results
+
+)
+
+
+
+
+
+results_df = (
+
+    results_df
+
+    .sort_values(
+
+        "MAE",
+
+        ascending=True
+
+    )
+
+    .reset_index(drop=True)
+
+)
+
+
+
+
+
+# ============================================================
+
+# 12. DISPLAY RESULTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TUNING RESULTS")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    results_df.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 13. BEST STATISTICAL MODEL
+
+# ============================================================
+
+
+
+best = results_df.iloc[0]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST STATISTICAL CONFIGURATION")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "Model:",
+
+    best["model"]
+
+)
+
+
+
+print(
+
+    "Order:",
+
+    best["order"]
+
+)
+
+
+
+print(
+
+    "Seasonal Order:",
+
+    best["seasonal_order"]
+
+)
+
+
+
+print(
+
+    "MAE:",
+
+    round(
+
+        best["MAE"],
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "RMSE:",
+
+    round(
+
+        best["RMSE"],
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "MAPE:",
+
+    round(
+
+        best["MAPE"],
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+print(
+
+    "WAPE:",
+
+    round(
+
+        best["WAPE"],
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 14. SAVE RESULTS
+
+# ============================================================
+
+
+
+output_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "arima_sarima",
+
+    "arima_sarima_tuning_results.csv"
+
+)
+
+
+
+
+
+results_df.to_csv(
+
+    output_file,
+
+    index=False
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("TUNING COMPLETED")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nSaved:"
+
+)
+
+
+
+print(
+
+    output_file
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+
+
+intermittent_demand_forecasting.py  -->
+
+# ============================================================
+
+# PROJECT FORESIGHT
+
+# Phase 5.3 - Intermittent Demand Forecasting
+
+# ============================================================
+
+
+
+import pandas as pd
+
+import numpy as np
+
+from pathlib import Path
+
+
+
+
+
+# ============================================================
+
+# PATHS
+
+# ============================================================
+
+
+
+BASE_PATH = Path(
+
+    r"E:\Zidio_Development_Internship\Project_Foresight"
+
+)
+
+
+
+PROCESSED_PATH = BASE_PATH / "data" / "processed"
+
+
+
+FORECASTING_PATH = (
+
+    PROCESSED_PATH / "forecasting"
+
+)
+
+
+
+INPUT_PATH = (
+
+    FORECASTING_PATH /
+
+    "forecast_demand_daily.csv"
+
+)
+
+
+
+OUTPUT_PATH = (
+
+    FORECASTING_PATH /
+
+    "intermittent_demand_forecast.csv"
+
+)
+
+
+
+SUMMARY_PATH = (
+
+    FORECASTING_PATH /
+
+    "intermittent_demand_summary.csv"
+
+)
+
+
+
+FORECASTING_PATH.mkdir(
+
+    parents=True,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+# ============================================================
+
+# HEADER
+
+# ============================================================
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - INTERMITTENT DEMAND FORECASTING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# LOAD DATA
+
+# ============================================================
+
+
+
+print("\nLoading forecast demand dataset...")
+
+
+
+daily = pd.read_csv(
+
+    INPUT_PATH,
+
+    low_memory=False
+
+)
+
+
+
+print("Dataset shape:", daily.shape)
+
+
+
+
+
+# ============================================================
+
+# BASIC VALIDATION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("BASIC VALIDATION")
+
+print("=" * 70)
+
+
+
+# ------------------------------------------------------------
+
+# CHECK REQUIRED COLUMNS
+
+# ------------------------------------------------------------
+
+
+
+required_columns = [
+
+    "date",
+
+    "store_id",
+
+    "sku_id",
+
+    "units_sold"
+
+]
+
+
+
+missing_columns = [
+
+    col
+
+    for col in required_columns
+
+    if col not in daily.columns
+
+]
+
+
+
+if missing_columns:
+
+
+
+    raise ValueError(
+
+        f"Missing required columns: {missing_columns}"
+
+    )
+
+
+
+print("\nRequired columns found successfully.")
+
+
+
+# ------------------------------------------------------------
+
+# DATE CONVERSION
+
+# ------------------------------------------------------------
+
+
+
+daily["date"] = pd.to_datetime(
+
+    daily["date"],
+
+    errors="coerce"
+
+)
+
+
+
+print(
+
+    "\nDate range:",
+
+    daily["date"].min(),
+
+    "to",
+
+    daily["date"].max()
+
+)
+
+
+
+# ------------------------------------------------------------
+
+# BASIC CHECKS
+
+# ------------------------------------------------------------
+
+
+
+print(
+
+    "Stores:",
+
+    daily["store_id"].nunique()
+
+)
+
+
+
+print(
+
+    "SKUs:",
+
+    daily["sku_id"].nunique()
+
+)
+
+
+
+print(
+
+    "Store-SKU combinations:",
+
+    daily[
+
+        ["store_id", "sku_id"]
+
+    ].drop_duplicates().shape[0]
+
+)
+
+
+
+print(
+
+    "Missing dates:",
+
+    daily["date"].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing demand values:",
+
+    daily["units_sold"].isna().sum()
+
+)
+
+
+
+print(
+
+    "Negative demand rows:",
+
+    (
+
+        daily["units_sold"] < 0
+
+    ).sum()
+
+)
+
+
+
+
+
+# ============================================================
+
+# STANDARDIZE DEMAND
+
+# ============================================================
+
+
+
+daily["units_sold"] = pd.to_numeric(
+
+    daily["units_sold"],
+
+    errors="coerce"
+
+)
+
+
+
+daily["units_sold"] = (
+
+    daily["units_sold"]
+
+    .fillna(0)
+
+)
+
+
+
+daily["units_sold"] = (
+
+    daily["units_sold"]
+
+    .clip(lower=0)
+
+)
+
+
+
+
+
+# ============================================================
+
+# GLOBAL DEMAND PROFILE
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("GLOBAL INTERMITTENT DEMAND PROFILE")
+
+print("=" * 70)
+
+
+
+total_rows = len(daily)
+
+
+
+zero_demand_rows = (
+
+    daily["units_sold"] == 0
+
+).sum()
+
+
+
+positive_demand_rows = (
+
+    daily["units_sold"] > 0
+
+).sum()
+
+
+
+zero_percentage = (
+
+    zero_demand_rows /
+
+    total_rows *
+
+    100
+
+)
+
+
+
+positive_percentage = (
+
+    positive_demand_rows /
+
+    total_rows *
+
+    100
+
+)
+
+
+
+print(
+
+    "\nTotal observations:",
+
+    total_rows
+
+)
+
+
+
+print(
+
+    "Zero-demand observations:",
+
+    zero_demand_rows
+
+)
+
+
+
+print(
+
+    "Positive-demand observations:",
+
+    positive_demand_rows
+
+)
+
+
+
+print(
+
+    f"Zero-demand percentage: "
+
+    f"{zero_percentage:.2f}%"
+
+)
+
+
+
+print(
+
+    f"Positive-demand percentage: "
+
+    f"{positive_percentage:.2f}%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# STORE-SKU LEVEL SUMMARY
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("STORE-SKU INTERMITTENT DEMAND PROFILE")
+
+print("=" * 70)
+
+
+
+
+
+summary = (
+
+    daily
+
+    .groupby(
+
+        ["store_id", "sku_id"],
+
+        as_index=False
+
+    )
+
+    .agg(
+
+        total_units=(
+
+            "units_sold",
+
+            "sum"
+
+        ),
+
+
+
+        active_days=(
+
+            "units_sold",
+
+            lambda x: (x > 0).sum()
+
+        ),
+
+
+
+        total_days=(
+
+            "units_sold",
+
+            "count"
+
+        ),
+
+
+
+        max_daily_demand=(
+
+            "units_sold",
+
+            "max"
+
+        ),
+
+
+
+        avg_daily_demand=(
+
+            "units_sold",
+
+            "mean"
+
+        )
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# ZERO DAYS
+
+# ============================================================
+
+
+
+summary["zero_days"] = (
+
+    summary["total_days"] -
+
+    summary["active_days"]
+
+)
+
+
+
+
+
+# ============================================================
+
+# ACTIVITY RATE
+
+# ============================================================
+
+
+
+summary["activity_rate"] = np.where(
+
+    summary["total_days"] > 0,
+
+
+
+    summary["active_days"] /
+
+    summary["total_days"],
+
+
+
+    0
+
+)
+
+
+
+
+
+# ============================================================
+
+# AVERAGE POSITIVE DEMAND
+
+# ============================================================
+
+
+
+summary["avg_positive_demand"] = np.where(
+
+    summary["active_days"] > 0,
+
+
+
+    summary["total_units"] /
+
+    summary["active_days"],
+
+
+
+    0
+
+)
+
+
+
+
+
+# ============================================================
+
+# INTERMITTENCY MEASURES
+
+# ============================================================
+
+
+
+# ------------------------------------------------------------
+
+# INTER-DEMAND INTERVAL
+
+# ------------------------------------------------------------
+
+
+
+summary["average_demand_interval"] = np.where(
+
+    summary["active_days"] > 0,
+
+
+
+    summary["total_days"] /
+
+    summary["active_days"],
+
+
+
+    np.inf
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# COEFFICIENT OF VARIATION
+
+# ------------------------------------------------------------
+
+
+
+positive_cv = (
+
+    daily[
+
+        daily["units_sold"] > 0
+
+    ]
+
+    .groupby(
+
+        ["store_id", "sku_id"]
+
+    )["units_sold"]
+
+    .agg(
+
+        positive_std="std",
+
+        positive_mean="mean"
+
+    )
+
+    .reset_index()
+
+)
+
+
+
+summary = summary.merge(
+
+    positive_cv,
+
+    on=[
+
+        "store_id",
+
+        "sku_id"
+
+    ],
+
+    how="left"
+
+)
+
+
+
+summary["positive_std"] = (
+
+    summary["positive_std"]
+
+    .fillna(0)
+
+)
+
+
+
+summary["positive_mean"] = (
+
+    summary["positive_mean"]
+
+    .fillna(0)
+
+)
+
+
+
+summary["cv_positive"] = np.where(
+
+    summary["positive_mean"] > 0,
+
+
+
+    summary["positive_std"] /
+
+    summary["positive_mean"],
+
+
+
+    0
+
+)
+
+
+
+
+
+# ============================================================
+
+# DEMAND CLASSIFICATION
+
+# ============================================================
+
+
+
+def classify_intermitency(row):
+
+
+
+    activity = row["activity_rate"]
+
+
+
+    cv = row["cv_positive"]
+
+
+
+    if activity == 0:
+
+
+
+        return "No Demand"
+
+
+
+    elif activity < 0.05:
+
+
+
+        if cv > 1.0:
+
+            return "Highly Intermittent"
+
+
+
+        return "Intermittent"
+
+
+
+    elif activity < 0.20:
+
+
+
+        if cv > 1.0:
+
+            return "Intermittent Variable"
+
+
+
+        return "Intermittent"
+
+
+
+    else:
+
+
+
+        if cv > 1.0:
+
+            return "Variable"
+
+
+
+        return "Regular"
+
+
+
+
+
+summary["intermittency_class"] = (
+
+    summary.apply(
+
+        classify_intermitency,
+
+        axis=1
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECASTABILITY
+
+# ============================================================
+
+
+
+def classify_forecastability(row):
+
+
+
+    activity = row["activity_rate"]
+
+
+
+    cv = row["cv_positive"]
+
+
+
+    if activity == 0:
+
+
+
+        return "No Demand"
+
+
+
+    if activity < 0.03:
+
+
+
+        return "Very Difficult"
+
+
+
+    if activity < 0.05:
+
+
+
+        if cv > 1.0:
+
+            return "Very Difficult"
+
+
+
+        return "Difficult"
+
+
+
+    if activity < 0.10:
+
+
+
+        if cv > 1.5:
+
+            return "Very Difficult"
+
+
+
+        return "Difficult"
+
+
+
+    if cv > 1.5:
+
+
+
+        return "Difficult"
+
+
+
+    return "Moderate"
+
+
+
+
+
+summary["forecastability"] = (
+
+    summary.apply(
+
+        classify_forecastability,
+
+        axis=1
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# RECENT DEMAND WINDOWS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("CALCULATING INTERMITTENT DEMAND FORECASTS")
+
+print("=" * 70)
+
+
+
+
+
+reference_date = daily["date"].max()
+
+
+
+print(
+
+    "\nReference date:",
+
+    reference_date.date()
+
+)
+
+
+
+
+
+# ------------------------------------------------------------
+
+# CREATE DAYS FROM REFERENCE
+
+# ------------------------------------------------------------
+
+
+
+daily["days_from_reference"] = (
+
+    reference_date -
+
+    daily["date"]
+
+).dt.days
+
+
+
+
+
+# ============================================================
+
+# FORECAST FUNCTION
+
+# ============================================================
+
+
+
+def calculate_window_forecast(
+
+    df,
+
+    days
+
+):
+
+
+
+    window = df[
+
+        (
+
+            df["days_from_reference"] >= 0
+
+        )
+
+        &
+
+        (
+
+            df["days_from_reference"] < days
+
+        )
+
+    ]
+
+
+
+    result = (
+
+        window
+
+        .groupby(
+
+            ["store_id", "sku_id"],
+
+            as_index=False
+
+        )["units_sold"]
+
+        .sum()
+
+    )
+
+
+
+    result[
+
+        f"units_{days}d"
+
+    ] = result["units_sold"]
+
+
+
+    result[
+
+        f"avg_daily_{days}d"
+
+    ] = (
+
+        result["units_sold"] /
+
+        days
+
+    )
+
+
+
+    return result[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            f"units_{days}d",
+
+            f"avg_daily_{days}d"
+
+        ]
+
+    ]
+
+
+
+
+
+# ============================================================
+
+# WINDOW FORECASTS
+
+# ============================================================
+
+
+
+f7 = calculate_window_forecast(
+
+    daily,
+
+    7
+
+)
+
+
+
+f14 = calculate_window_forecast(
+
+    daily,
+
+    14
+
+)
+
+
+
+f30 = calculate_window_forecast(
+
+    daily,
+
+    30
+
+)
+
+
+
+f60 = calculate_window_forecast(
+
+    daily,
+
+    60
+
+)
+
+
+
+f90 = calculate_window_forecast(
+
+    daily,
+
+    90
+
+)
+
+
+
+
+
+# ============================================================
+
+# MERGE FORECAST WINDOWS
+
+# ============================================================
+
+
+
+forecast = summary.copy()
+
+
+
+
+
+for window_df in [
+
+    f7,
+
+    f14,
+
+    f30,
+
+    f60,
+
+    f90
+
+]:
+
+
+
+    forecast = forecast.merge(
+
+        window_df,
+
+        on=[
+
+            "store_id",
+
+            "sku_id"
+
+        ],
+
+        how="left"
+
+    )
+
+
+
+
+
+# ============================================================
+
+# FILL MISSING VALUES
+
+# ============================================================
+
+
+
+window_columns = [
+
+    "units_7d",
+
+    "avg_daily_7d",
+
+
+
+    "units_14d",
+
+    "avg_daily_14d",
+
+
+
+    "units_30d",
+
+    "avg_daily_30d",
+
+
+
+    "units_60d",
+
+    "avg_daily_60d",
+
+
+
+    "units_90d",
+
+    "avg_daily_90d"
+
+]
+
+
+
+forecast[
+
+    window_columns
+
+] = forecast[
+
+    window_columns
+
+].fillna(0)
+
+
+
+
+
+# ============================================================
+
+# CROSTON-STYLE BASELINE
+
+# ============================================================
+
+
+
+# For intermittent demand, a simple Croston-style
+
+# estimate is based on:
+
+#
+
+# Average positive demand
+
+# divided by
+
+# Average interval between demand events
+
+
+
+forecast["croston_forecast"] = np.where(
+
+
+
+    forecast["average_demand_interval"] > 0,
+
+
+
+    forecast["avg_positive_demand"] /
+
+    forecast["average_demand_interval"],
+
+
+
+    0
+
+)
+
+
+
+
+
+# ============================================================
+
+# RECENT WEIGHTED FORECAST
+
+# ============================================================
+
+
+
+forecast["recent_weighted_forecast"] = (
+
+
+
+    forecast["avg_daily_7d"] * 0.40
+
+
+
+    +
+
+
+
+    forecast["avg_daily_14d"] * 0.25
+
+
+
+    +
+
+
+
+    forecast["avg_daily_30d"] * 0.20
+
+
+
+    +
+
+
+
+    forecast["avg_daily_60d"] * 0.10
+
+
+
+    +
+
+
+
+    forecast["avg_daily_90d"] * 0.05
+
+)
+
+
+
+
+
+# ============================================================
+
+# INTERMITTENT DEMAND FORECAST
+
+# ============================================================
+
+
+
+forecast["intermittent_forecast"] = np.where(
+
+
+
+    forecast["intermittency_class"].isin(
+
+        [
+
+            "Highly Intermittent",
+
+            "Intermittent",
+
+            "Intermittent Variable"
+
+        ]
+
+    ),
+
+
+
+    (
+
+        forecast["croston_forecast"] * 0.60
+
+        +
+
+        forecast["recent_weighted_forecast"] * 0.40
+
+    ),
+
+
+
+    forecast["recent_weighted_forecast"]
+
+)
+
+
+
+
+
+# ============================================================
+
+# RECENT DEMAND SIGNAL
+
+# ============================================================
+
+
+
+forecast["recent_demand_signal"] = np.select(
+
+
+
+    [
+
+
+
+        forecast["units_7d"] > 0,
+
+
+
+        forecast["units_14d"] > 0,
+
+
+
+        forecast["units_30d"] > 0,
+
+
+
+        forecast["units_90d"] > 0
+
+
+
+    ],
+
+
+
+    [
+
+
+
+        "Very Recent Demand",
+
+
+
+        "Recent Demand",
+
+
+
+        "Historical Recent Demand",
+
+
+
+        "Old Demand"
+
+
+
+    ],
+
+
+
+    default="No Observed Demand"
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECAST CONFIDENCE
+
+# ============================================================
+
+
+
+def forecast_confidence(row):
+
+
+
+    forecastability = (
+
+        row["forecastability"]
+
+    )
+
+
+
+    activity = (
+
+        row["activity_rate"]
+
+    )
+
+
+
+    if forecastability == "No Demand":
+
+
+
+        return "None"
+
+
+
+    if forecastability == "Very Difficult":
+
+
+
+        return "Low"
+
+
+
+    if forecastability == "Difficult":
+
+
+
+        return "Low-Medium"
+
+
+
+    if activity >= 0.10:
+
+
+
+        return "Medium"
+
+
+
+    return "Low-Medium"
+
+
+
+
+
+forecast["forecast_confidence"] = (
+
+    forecast.apply(
+
+        forecast_confidence,
+
+        axis=1
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECAST HORIZONS
+
+# ============================================================
+
+
+
+forecast["forecast_7d_units"] = (
+
+    forecast["intermittent_forecast"] *
+
+    7
+
+)
+
+
+
+forecast["forecast_30d_units"] = (
+
+    forecast["intermittent_forecast"] *
+
+    30
+
+)
+
+
+
+forecast["forecast_90d_units"] = (
+
+    forecast["intermittent_forecast"] *
+
+    90
+
+)
+
+
+
+
+
+# ============================================================
+
+# ROUNDING
+
+# ============================================================
+
+
+
+numeric_columns = [
+
+
+
+    "activity_rate",
+
+
+
+    "avg_daily_demand",
+
+
+
+    "avg_positive_demand",
+
+
+
+    "average_demand_interval",
+
+
+
+    "cv_positive",
+
+
+
+    "croston_forecast",
+
+
+
+    "recent_weighted_forecast",
+
+
+
+    "intermittent_forecast",
+
+
+
+    "forecast_7d_units",
+
+
+
+    "forecast_30d_units",
+
+
+
+    "forecast_90d_units"
+
+
+
+]
+
+
+
+for column in numeric_columns:
+
+
+
+    if column in forecast.columns:
+
+
+
+        forecast[column] = (
+
+            forecast[column]
+
+            .replace(
+
+                [np.inf, -np.inf],
+
+                np.nan
+
+            )
+
+            .round(4)
+
+        )
+
+
+
+
+
+# ============================================================
+
+# SUMMARY
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("INTERMITTENCY CLASS DISTRIBUTION")
+
+print("=" * 70)
+
+
+
+print(
+
+    forecast[
+
+        "intermittency_class"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("FORECASTABILITY DISTRIBUTION")
+
+print("=" * 70)
+
+
+
+print(
+
+    forecast[
+
+        "forecastability"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("RECENT DEMAND SIGNAL DISTRIBUTION")
+
+print("=" * 70)
+
+
+
+print(
+
+    forecast[
+
+        "recent_demand_signal"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECAST SUMMARY STATISTICS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("INTERMITTENT FORECAST SUMMARY")
+
+print("=" * 70)
+
+
+
+print(
+
+    forecast[
+
+        "intermittent_forecast"
+
+    ].describe()
+
+)
+
+
+
+
+
+# ============================================================
+
+# TOP FORECAST ITEMS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 STORE-SKU ITEMS BY INTERMITTENT FORECAST")
+
+print("=" * 70)
+
+
+
+top_forecast = (
+
+    forecast
+
+    .sort_values(
+
+        "intermittent_forecast",
+
+        ascending=False
+
+    )
+
+    .head(20)
+
+)
+
+
+
+print(
+
+    top_forecast[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "total_units",
+
+            "active_days",
+
+            "activity_rate",
+
+            "avg_positive_demand",
+
+            "average_demand_interval",
+
+            "units_7d",
+
+            "units_30d",
+
+            "units_90d",
+
+            "croston_forecast",
+
+            "recent_weighted_forecast",
+
+            "intermittent_forecast",
+
+            "forecastability",
+
+            "forecast_confidence"
+
+        ]
+
+    ].to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# MOST INTERMITTENT ITEMS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 MOST INTERMITTENT ACTIVE ITEMS")
+
+print("=" * 70)
+
+
+
+intermittent_items = (
+
+    forecast[
+
+        forecast["active_days"] > 0
+
+    ]
+
+    .sort_values(
+
+        [
+
+            "activity_rate",
+
+            "average_demand_interval"
+
+        ],
+
+        ascending=[
+
+            True,
+
+            False
+
+        ]
+
+    )
+
+    .head(20)
+
+)
+
+
+
+print(
+
+    intermittent_items[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "total_units",
+
+            "active_days",
+
+            "zero_days",
+
+            "activity_rate",
+
+            "avg_positive_demand",
+
+            "average_demand_interval",
+
+            "cv_positive",
+
+            "intermittency_class",
+
+            "forecastability",
+
+            "intermittent_forecast"
+
+        ]
+
+    ].to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# NO-DEMAND ITEMS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("NO-DEMAND STORE-SKU ITEMS")
+
+print("=" * 70)
+
+
+
+no_demand = forecast[
+
+    forecast["active_days"] == 0
+
+]
+
+
+
+print(
+
+    "Number of no-demand items:",
+
+    len(no_demand)
+
+)
+
+
+
+print(
+
+    no_demand[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "total_units",
+
+            "active_days",
+
+            "zero_days",
+
+            "activity_rate",
+
+            "intermittency_class",
+
+            "forecastability",
+
+            "intermittent_forecast"
+
+        ]
+
+    ]
+
+    .head(20)
+
+    .to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# FINAL VALIDATION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("FINAL VALIDATION")
+
+print("=" * 70)
+
+
+
+print(
+
+    "Forecast shape:",
+
+    forecast.shape
+
+)
+
+
+
+print(
+
+    "Missing intermittent forecasts:",
+
+    forecast[
+
+        "intermittent_forecast"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Negative forecasts:",
+
+    (
+
+        forecast[
+
+            "intermittent_forecast"
+
+        ] < 0
+
+    ).sum()
+
+)
+
+
+
+print(
+
+    "Missing forecastability:",
+
+    forecast[
+
+        "forecastability"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing intermittency class:",
+
+    forecast[
+
+        "intermittency_class"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Missing forecast confidence:",
+
+    forecast[
+
+        "forecast_confidence"
+
+    ].isna().sum()
+
+)
+
+
+
+
+
+# ============================================================
+
+# SAVE OUTPUT
+
+# ============================================================
+
+
+
+forecast.to_csv(
+
+    OUTPUT_PATH,
+
+    index=False
+
+)
+
+
+
+forecast[
+
+    [
+
+        "store_id",
+
+        "sku_id",
+
+        "total_units",
+
+        "active_days",
+
+        "zero_days",
+
+        "activity_rate",
+
+        "avg_positive_demand",
+
+        "average_demand_interval",
+
+        "cv_positive",
+
+        "intermittency_class",
+
+        "forecastability",
+
+        "units_7d",
+
+        "units_14d",
+
+        "units_30d",
+
+        "units_60d",
+
+        "units_90d",
+
+        "croston_forecast",
+
+        "recent_weighted_forecast",
+
+        "intermittent_forecast",
+
+        "forecast_7d_units",
+
+        "forecast_30d_units",
+
+        "forecast_90d_units",
+
+        "recent_demand_signal",
+
+        "forecast_confidence"
+
+    ]
+
+].to_csv(
+
+    SUMMARY_PATH,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# FINAL MESSAGE
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("PHASE 5.3 COMPLETED SUCCESSFULLY")
+
+print("=" * 70)
+
+
+
+print("\nIntermittent forecast saved to:")
+
+print(OUTPUT_PATH)
+
+
+
+print("\nIntermittent forecast summary saved to:")
+
+print(SUMMARY_PATH)
+
+
+
+print("\n" + "=" * 70)
+
+print("NEXT PHASE: FORECAST MODEL EVALUATION")
+
+print("=" * 70)
+
+
+
+forecast_model_evaluation.py -->
+
+# ============================================================
+
+# PROJECT FORESIGHT
+
+# Phase 5.4 - Forecast Model Evaluation
+
+# Memory-Efficient Backtesting Engine
+
+# ============================================================
+
+
+
+import pandas as pd
+
+import numpy as np
+
+from pathlib import Path
+
+
+
+
+
+# ============================================================
+
+# PATHS
+
+# ============================================================
+
+
+
+BASE_PATH = Path(
+
+    r"E:\Zidio_Development_Internship\Project_Foresight"
+
+)
+
+
+
+PROCESSED_PATH = BASE_PATH / "data" / "processed"
+
+
+
+FORECASTING_PATH = PROCESSED_PATH / "forecasting"
+
+
+
+DAILY_DEMAND_PATH = (
+
+    FORECASTING_PATH /
+
+    "forecast_demand_daily.csv"
+
+)
+
+
+
+BASELINE_PATH = (
+
+    FORECASTING_PATH /
+
+    "demand_forecast_baseline.csv"
+
+)
+
+
+
+INTERMITTENT_PATH = (
+
+    FORECASTING_PATH /
+
+    "intermittent_demand_forecast.csv"
+
+)
+
+
+
+OUTPUT_PATH = (
+
+    FORECASTING_PATH /
+
+    "evaluation"
+
+)
+
+
+
+OUTPUT_PATH.mkdir(
+
+    parents=True,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+# ============================================================
+
+# CONFIGURATION
+
+# ============================================================
+
+
+
+VALIDATION_DAYS = 30
+
+
+
+# Your latest available date
+
+REFERENCE_DATE = pd.Timestamp("2025-10-31")
+
+
+
+# 30-day backtest
+
+VALIDATION_END = REFERENCE_DATE
+
+
+
+VALIDATION_START = (
+
+    VALIDATION_END -
+
+    pd.Timedelta(days=VALIDATION_DAYS - 1)
+
+)
+
+
+
+TRAINING_END = (
+
+    VALIDATION_START -
+
+    pd.Timedelta(days=1)
+
+)
+
+
+
+
+
+# ============================================================
+
+# HEADER
+
+# ============================================================
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - FORECAST MODEL EVALUATION")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# LOAD FORECAST DATASETS
+
+# ============================================================
+
+
+
+print("\nLoading baseline forecast...")
+
+
+
+baseline = pd.read_csv(
+
+    BASELINE_PATH,
+
+    low_memory=False
+
+)
+
+
+
+print(
+
+    "Baseline forecast shape:",
+
+    baseline.shape
+
+)
+
+
+
+
+
+print("\nLoading intermittent forecast...")
+
+
+
+intermittent = pd.read_csv(
+
+    INTERMITTENT_PATH,
+
+    low_memory=False
+
+)
+
+
+
+print(
+
+    "Intermittent forecast shape:",
+
+    intermittent.shape
+
+)
+
+
+
+
+
+# ============================================================
+
+# VALIDATE FORECAST COLUMNS
+
+# ============================================================
+
+
+
+required_baseline_columns = [
+
+    "store_id",
+
+    "sku_id",
+
+    "forecast_weighted",
+
+    "forecastability",
+
+    "baseline_trend"
+
+]
+
+
+
+required_intermittent_columns = [
+
+    "store_id",
+
+    "sku_id",
+
+    "intermittent_forecast",
+
+    "forecastability",
+
+    "forecast_confidence"
+
+]
+
+
+
+
+
+missing_baseline = [
+
+    col
+
+    for col in required_baseline_columns
+
+    if col not in baseline.columns
+
+]
+
+
+
+missing_intermittent = [
+
+    col
+
+    for col in required_intermittent_columns
+
+    if col not in intermittent.columns
+
+]
+
+
+
+
+
+if missing_baseline:
+
+
+
+    raise ValueError(
+
+        "Missing baseline columns: "
+
+        + str(missing_baseline)
+
+    )
+
+
+
+
+
+if missing_intermittent:
+
+
+
+    raise ValueError(
+
+        "Missing intermittent columns: "
+
+        + str(missing_intermittent)
+
+    )
+
+
+
+
+
+# ============================================================
+
+# KEEP ONLY REQUIRED FORECAST COLUMNS
+
+# ============================================================
+
+
+
+baseline = baseline[
+
+    [
+
+        "store_id",
+
+        "sku_id",
+
+        "forecast_weighted",
+
+        "forecastability",
+
+        "baseline_trend"
+
+    ]
+
+].copy()
+
+
+
+
+
+intermittent = intermittent[
+
+    [
+
+        "store_id",
+
+        "sku_id",
+
+        "intermittent_forecast",
+
+        "forecastability",
+
+        "forecast_confidence"
+
+    ]
+
+].copy()
+
+
+
+
+
+# ============================================================
+
+# BASIC FORECAST VALIDATION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("FORECAST VALIDATION")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nBaseline missing forecasts:",
+
+    baseline["forecast_weighted"].isna().sum()
+
+)
+
+
+
+print(
+
+    "Baseline negative forecasts:",
+
+    (
+
+        baseline["forecast_weighted"] < 0
+
+    ).sum()
+
+)
+
+
+
+
+
+print(
+
+    "\nIntermittent missing forecasts:",
+
+    intermittent[
+
+        "intermittent_forecast"
+
+    ].isna().sum()
+
+)
+
+
+
+print(
+
+    "Intermittent negative forecasts:",
+
+    (
+
+        intermittent[
+
+            "intermittent_forecast"
+
+        ] < 0
+
+    ).sum()
+
+)
+
+
+
+
+
+# ============================================================
+
+# LOAD ONLY REQUIRED DAILY DEMAND COLUMNS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("LOADING VALIDATION DEMAND DATA")
+
+print("=" * 70)
+
+
+
+print(
+
+    "\nValidation period:",
+
+    VALIDATION_START.date(),
+
+    "to",
+
+    VALIDATION_END.date()
+
+)
+
+
+
+print(
+
+    "Training end:",
+
+    TRAINING_END.date()
+
+)
+
+
+
+print(
+
+    "\nReading daily demand data in chunks..."
+
+)
+
+
+
+
+
+# ============================================================
+
+# MEMORY-EFFICIENT CHUNK PROCESSING
+
+# ============================================================
+
+
+
+required_daily_columns = [
+
+    "store_id",
+
+    "sku_id",
+
+    "date",
+
+    "units_sold"
+
+]
+
+
+
+
+
+validation_parts = []
+
+
+
+chunk_number = 0
+
+
+
+total_rows_read = 0
+
+
+
+total_validation_rows = 0
+
+
+
+
+
+for chunk in pd.read_csv(
+
+    DAILY_DEMAND_PATH,
+
+    usecols=required_daily_columns,
+
+    parse_dates=["date"],
+
+    chunksize=500_000
+
+):
+
+
+
+    chunk_number += 1
+
+
+
+    total_rows_read += len(chunk)
+
+
+
+    # --------------------------------------------------------
+
+    # Keep ONLY validation period
+
+    # --------------------------------------------------------
+
+
+
+    validation_chunk = chunk[
+
+        (
+
+            chunk["date"] >=
+
+            VALIDATION_START
+
+        )
+
+        &
+
+        (
+
+            chunk["date"] <=
+
+            VALIDATION_END
+
+        )
+
+    ]
+
+
+
+    if not validation_chunk.empty:
+
+
+
+        # Aggregate immediately
+
+        validation_agg = (
+
+            validation_chunk
+
+            .groupby(
+
+                [
+
+                    "store_id",
+
+                    "sku_id"
+
+                ],
+
+                as_index=False
+
+            )[
+
+                "units_sold"
+
+            ]
+
+            .sum()
+
+        )
+
+
+
+        validation_parts.append(
+
+            validation_agg
+
+        )
+
+
+
+        total_validation_rows += len(
+
+            validation_chunk
+
+        )
+
+
+
+    del chunk
+
+    del validation_chunk
+
+
+
+
+
+print(
+
+    "\nChunks processed:",
+
+    chunk_number
+
+)
+
+
+
+print(
+
+    "Total rows scanned:",
+
+    total_rows_read
+
+)
+
+
+
+print(
+
+    "Validation rows found:",
+
+    total_validation_rows
+
+)
+
+
+
+
+
+# ============================================================
+
+# COMBINE VALIDATION AGGREGATIONS
+
+# ============================================================
+
+
+
+print(
+
+    "\nAggregating validation demand..."
+
+)
+
+
+
+
+
+if len(validation_parts) == 0:
+
+
+
+    raise ValueError(
+
+        "No validation demand found."
+
+    )
+
+
+
+
+
+validation = pd.concat(
+
+    validation_parts,
+
+    ignore_index=True
+
+)
+
+
+
+
+
+del validation_parts
+
+
+
+
+
+validation = (
+
+    validation
+
+    .groupby(
+
+        [
+
+            "store_id",
+
+            "sku_id"
+
+        ],
+
+        as_index=False
+
+    )[
+
+        "units_sold"
+
+    ]
+
+    .sum()
+
+)
+
+
+
+
+
+validation = validation.rename(
+
+    columns={
+
+        "units_sold":
+
+        "actual_units_30d"
+
+    }
+
+)
+
+
+
+
+
+# ============================================================
+
+# CREATE COMPLETE STORE-SKU EVALUATION GRID
+
+# ============================================================
+
+
+
+print(
+
+    "\nCreating evaluation dataset..."
+
+)
+
+
+
+
+
+evaluation = baseline.merge(
+
+    intermittent,
+
+    on=[
+
+        "store_id",
+
+        "sku_id"
+
+    ],
+
+    how="outer",
+
+    suffixes=(
+
+        "_baseline",
+
+        "_intermittent"
+
+    )
+
+)
+
+
+
+
+
+evaluation = evaluation.merge(
+
+    validation,
+
+    on=[
+
+        "store_id",
+
+        "sku_id"
+
+    ],
+
+    how="left"
+
+)
+
+
+
+
+
+evaluation["actual_units_30d"] = (
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ]
+
+    .fillna(0)
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECAST VALIDATION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("EVALUATION DATASET")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nEvaluation shape:",
+
+    evaluation.shape
+
+)
+
+
+
+
+
+print(
+
+    "Store-SKU combinations:",
+
+    evaluation[
+
+        [
+
+            "store_id",
+
+            "sku_id"
+
+        ]
+
+    ].drop_duplicates().shape[0]
+
+)
+
+
+
+
+
+print(
+
+    "Actual demand missing:",
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ].isna().sum()
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECAST COLUMNS
+
+# ============================================================
+
+
+
+evaluation["baseline_forecast"] = (
+
+    evaluation[
+
+        "forecast_weighted"
+
+    ]
+
+    * VALIDATION_DAYS
+
+)
+
+
+
+
+
+evaluation["intermittent_forecast_30d"] = (
+
+    evaluation[
+
+        "intermittent_forecast"
+
+    ]
+
+    * VALIDATION_DAYS
+
+)
+
+
+
+
+
+# ============================================================
+
+# ERROR CALCULATIONS
+
+# ============================================================
+
+
+
+evaluation[
+
+    "baseline_error"
+
+] = (
+
+    evaluation[
+
+        "baseline_forecast"
+
+    ]
+
+    -
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ]
+
+)
+
+
+
+
+
+evaluation[
+
+    "intermittent_error"
+
+] = (
+
+    evaluation[
+
+        "intermittent_forecast_30d"
+
+    ]
+
+    -
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ]
+
+)
+
+
+
+
+
+evaluation[
+
+    "baseline_abs_error"
+
+] = (
+
+    evaluation[
+
+        "baseline_error"
+
+    ].abs()
+
+)
+
+
+
+
+
+evaluation[
+
+    "intermittent_abs_error"
+
+] = (
+
+    evaluation[
+
+        "intermittent_error"
+
+    ].abs()
+
+)
+
+
+
+
+
+evaluation[
+
+    "baseline_squared_error"
+
+] = (
+
+    evaluation[
+
+        "baseline_error"
+
+    ] ** 2
+
+)
+
+
+
+
+
+evaluation[
+
+    "intermittent_squared_error"
+
+] = (
+
+    evaluation[
+
+        "intermittent_error"
+
+    ] ** 2
+
+)
+
+
+
+
+
+# ============================================================
+
+# METRIC FUNCTION
+
+# ============================================================
+
+
+
+def calculate_metrics(
+
+    actual,
+
+    forecast,
+
+    model_name
+
+):
+
+
+
+    actual = np.asarray(
+
+        actual,
+
+        dtype=float
+
+    )
+
+
+
+    forecast = np.asarray(
+
+        forecast,
+
+        dtype=float
+
+    )
+
+
+
+    error = (
+
+        forecast -
+
+        actual
+
+    )
+
+
+
+    absolute_error = np.abs(
+
+        error
+
+    )
+
+
+
+    squared_error = (
+
+        error ** 2
+
+    )
+
+
+
+    mae = (
+
+        absolute_error.mean()
+
+    )
+
+
+
+    rmse = np.sqrt(
+
+        squared_error.mean()
+
+    )
+
+
+
+    bias = error.mean()
+
+
+
+    total_actual = actual.sum()
+
+
+
+    if total_actual > 0:
+
+
+
+        wape = (
+
+            absolute_error.sum()
+
+            /
+
+            total_actual
+
+        ) * 100
+
+
+
+    else:
+
+
+
+        wape = np.nan
+
+
+
+    return {
+
+        "model": model_name,
+
+        "MAE": mae,
+
+        "RMSE": rmse,
+
+        "Bias": bias,
+
+        "WAPE_pct": wape
+
+    }
+
+
+
+
+
+# ============================================================
+
+# GLOBAL MODEL METRICS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("GLOBAL MODEL PERFORMANCE")
+
+print("=" * 70)
+
+
+
+
+
+baseline_metrics = calculate_metrics(
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ],
+
+    evaluation[
+
+        "baseline_forecast"
+
+    ],
+
+    "Baseline Weighted Forecast"
+
+)
+
+
+
+
+
+intermittent_metrics = calculate_metrics(
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ],
+
+    evaluation[
+
+        "intermittent_forecast_30d"
+
+    ],
+
+    "Intermittent Forecast"
+
+)
+
+
+
+
+
+metrics = pd.DataFrame(
+
+    [
+
+        baseline_metrics,
+
+        intermittent_metrics
+
+    ]
+
+)
+
+
+
+
+
+print(
+
+    metrics.to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# MODEL WINNER
+
+# ============================================================
+
+
+
+baseline_mae = (
+
+    baseline_metrics["MAE"]
+
+)
+
+
+
+intermittent_mae = (
+
+    intermittent_metrics["MAE"]
+
+)
+
+
+
+
+
+if baseline_mae < intermittent_mae:
+
+
+
+    overall_winner = (
+
+        "Baseline Weighted Forecast"
+
+    )
+
+
+
+elif intermittent_mae < baseline_mae:
+
+
+
+    overall_winner = (
+
+        "Intermittent Forecast"
+
+    )
+
+
+
+else:
+
+
+
+    overall_winner = "Tie"
+
+
+
+
+
+print(
+
+    "\nOverall model winner based on MAE:",
+
+    overall_winner
+
+)
+
+
+
+
+
+# ============================================================
+
+# ZERO DEMAND PERFORMANCE
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("ZERO-DEMAND PERFORMANCE")
+
+print("=" * 70)
+
+
+
+
+
+zero_actual = (
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ] == 0
+
+)
+
+
+
+
+
+zero_demand_count = (
+
+    zero_actual.sum()
+
+)
+
+
+
+
+
+print(
+
+    "\nZero-demand store-SKU combinations:",
+
+    zero_demand_count
+
+)
+
+
+
+
+
+if zero_demand_count > 0:
+
+
+
+    baseline_zero_mae = (
+
+        evaluation.loc[
+
+            zero_actual,
+
+            "baseline_abs_error"
+
+        ].mean()
+
+    )
+
+
+
+    intermittent_zero_mae = (
+
+        evaluation.loc[
+
+            zero_actual,
+
+            "intermittent_abs_error"
+
+        ].mean()
+
+    )
+
+
+
+else:
+
+
+
+    baseline_zero_mae = np.nan
+
+
+
+    intermittent_zero_mae = np.nan
+
+
+
+
+
+print(
+
+    "Baseline zero-demand MAE:",
+
+    baseline_zero_mae
+
+)
+
+
+
+print(
+
+    "Intermittent zero-demand MAE:",
+
+    intermittent_zero_mae
+
+)
+
+
+
+
+
+# ============================================================
+
+# ACTIVE DEMAND PERFORMANCE
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("ACTIVE-DEMAND PERFORMANCE")
+
+print("=" * 70)
+
+
+
+
+
+active_actual = (
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ] > 0
+
+)
+
+
+
+
+
+active_count = (
+
+    active_actual.sum()
+
+)
+
+
+
+
+
+print(
+
+    "\nActive store-SKU combinations:",
+
+    active_count
+
+)
+
+
+
+
+
+if active_count > 0:
+
+
+
+    baseline_active_metrics = (
+
+        calculate_metrics(
+
+            evaluation.loc[
+
+                active_actual,
+
+                "actual_units_30d"
+
+            ],
+
+            evaluation.loc[
+
+                active_actual,
+
+                "baseline_forecast"
+
+            ],
+
+            "Baseline - Active"
+
+        )
+
+    )
+
+
+
+    intermittent_active_metrics = (
+
+        calculate_metrics(
+
+            evaluation.loc[
+
+                active_actual,
+
+                "actual_units_30d"
+
+            ],
+
+            evaluation.loc[
+
+                active_actual,
+
+                "intermittent_forecast_30d"
+
+            ],
+
+            "Intermittent - Active"
+
+        )
+
+    )
+
+
+
+    active_metrics = pd.DataFrame(
+
+        [
+
+            baseline_active_metrics,
+
+            intermittent_active_metrics
+
+        ]
+
+    )
+
+
+
+    print(
+
+        active_metrics.to_string(
+
+            index=False
+
+        )
+
+    )
+
+
+
+else:
+
+
+
+    active_metrics = pd.DataFrame()
+
+
+
+
+
+# ============================================================
+
+# STORE-SKU MODEL WINNER
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("STORE-SKU MODEL COMPARISON")
+
+print("=" * 70)
+
+
+
+
+
+evaluation["baseline_better"] = (
+
+    evaluation[
+
+        "baseline_abs_error"
+
+    ]
+
+    <
+
+    evaluation[
+
+        "intermittent_abs_error"
+
+    ]
+
+)
+
+
+
+
+
+evaluation["intermittent_better"] = (
+
+    evaluation[
+
+        "intermittent_abs_error"
+
+    ]
+
+    <
+
+    evaluation[
+
+        "baseline_abs_error"
+
+    ]
+
+)
+
+
+
+
+
+evaluation["model_tie"] = (
+
+    evaluation[
+
+        "baseline_abs_error"
+
+    ]
+
+    ==
+
+    evaluation[
+
+        "intermittent_abs_error"
+
+    ]
+
+)
+
+
+
+
+
+baseline_wins = (
+
+    evaluation[
+
+        "baseline_better"
+
+    ].sum()
+
+)
+
+
+
+
+
+intermittent_wins = (
+
+    evaluation[
+
+        "intermittent_better"
+
+    ].sum()
+
+)
+
+
+
+
+
+ties = (
+
+    evaluation[
+
+        "model_tie"
+
+    ].sum()
+
+)
+
+
+
+
+
+print(
+
+    "\nBaseline wins:",
+
+    baseline_wins
+
+)
+
+
+
+print(
+
+    "Intermittent model wins:",
+
+    intermittent_wins
+
+)
+
+
+
+print(
+
+    "Ties:",
+
+    ties
+
+)
+
+
+
+
+
+# ============================================================
+
+# SELECT BEST MODEL PER STORE-SKU
+
+# ============================================================
+
+
+
+def select_best_model(row):
+
+
+
+    baseline_error = (
+
+        row["baseline_abs_error"]
+
+    )
+
+
+
+    intermittent_error = (
+
+        row["intermittent_abs_error"]
+
+    )
+
+
+
+    if baseline_error < intermittent_error:
+
+
+
+        return "Baseline"
+
+
+
+    elif intermittent_error < baseline_error:
+
+
+
+        return "Intermittent"
+
+
+
+    return "Tie"
+
+
+
+
+
+evaluation["best_model"] = (
+
+    evaluation.apply(
+
+        select_best_model,
+
+        axis=1
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# RECOMMENDED FORECAST
+
+# ============================================================
+
+
+
+evaluation["recommended_forecast"] = (
+
+    np.where(
+
+        evaluation["best_model"] ==
+
+        "Intermittent",
+
+
+
+        evaluation[
+
+            "intermittent_forecast_30d"
+
+        ],
+
+
+
+        np.where(
+
+            evaluation["best_model"] ==
+
+            "Baseline",
+
+
+
+            evaluation[
+
+                "baseline_forecast"
+
+            ],
+
+
+
+            (
+
+                evaluation[
+
+                    "baseline_forecast"
+
+                ]
+
+                +
+
+                evaluation[
+
+                    "intermittent_forecast_30d"
+
+                ]
+
+            )
+
+            / 2
+
+        )
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECAST ERROR OF RECOMMENDED MODEL
+
+# ============================================================
+
+
+
+evaluation[
+
+    "recommended_error"
+
+] = (
+
+    evaluation[
+
+        "recommended_forecast"
+
+    ]
+
+    -
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ]
+
+)
+
+
+
+
+
+evaluation[
+
+    "recommended_abs_error"
+
+] = (
+
+    evaluation[
+
+        "recommended_error"
+
+    ].abs()
+
+)
+
+
+
+
+
+# ============================================================
+
+# RECOMMENDED MODEL METRICS
+
+# ============================================================
+
+
+
+recommended_metrics = calculate_metrics(
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ],
+
+    evaluation[
+
+        "recommended_forecast"
+
+    ],
+
+    "Recommended Store-SKU Model"
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("RECOMMENDED MODEL PERFORMANCE")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    pd.DataFrame(
+
+        [recommended_metrics]
+
+    ).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# FORECASTABILITY DISTRIBUTION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("FORECASTABILITY DISTRIBUTION")
+
+print("=" * 70)
+
+
+
+
+
+forecastability_distribution = (
+
+    evaluation[
+
+        "forecastability_baseline"
+
+    ]
+
+    .value_counts(
+
+        dropna=False
+
+    )
+
+)
+
+
+
+
+
+print(
+
+    forecastability_distribution
+
+)
+
+
+
+
+
+# ============================================================
+
+# MODEL SELECTION DISTRIBUTION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST MODEL DISTRIBUTION")
+
+print("=" * 70)
+
+
+
+
+
+best_model_distribution = (
+
+    evaluation[
+
+        "best_model"
+
+    ]
+
+    .value_counts()
+
+)
+
+
+
+
+
+print(
+
+    best_model_distribution
+
+)
+
+
+
+
+
+# ============================================================
+
+# TOP IMPROVEMENT ITEMS
+
+# ============================================================
+
+
+
+evaluation[
+
+    "improvement"
+
+] = (
+
+    evaluation[
+
+        "baseline_abs_error"
+
+    ]
+
+    -
+
+    evaluation[
+
+        "intermittent_abs_error"
+
+    ]
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 ITEMS WHERE INTERMITTENT MODEL IMPROVES")
+
+print("=" * 70)
+
+
+
+
+
+top_intermittent_improvement = (
+
+    evaluation
+
+    .sort_values(
+
+        "improvement",
+
+        ascending=False
+
+    )
+
+    .head(20)
+
+)
+
+
+
+
+
+print(
+
+    top_intermittent_improvement[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "actual_units_30d",
+
+            "baseline_forecast",
+
+            "intermittent_forecast_30d",
+
+            "baseline_abs_error",
+
+            "intermittent_abs_error",
+
+            "improvement",
+
+            "best_model"
+
+        ]
+
+    ]
+
+    .to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# TOP ITEMS WHERE BASELINE MODEL IMPROVES
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 ITEMS WHERE BASELINE MODEL IMPROVES")
+
+print("=" * 70)
+
+
+
+
+
+top_baseline_improvement = (
+
+    evaluation
+
+    .sort_values(
+
+        "improvement",
+
+        ascending=True
+
+    )
+
+    .head(20)
+
+)
+
+
+
+
+
+print(
+
+    top_baseline_improvement[
+
+        [
+
+            "store_id",
+
+            "sku_id",
+
+            "actual_units_30d",
+
+            "baseline_forecast",
+
+            "intermittent_forecast_30d",
+
+            "baseline_abs_error",
+
+            "intermittent_abs_error",
+
+            "improvement",
+
+            "best_model"
+
+        ]
+
+    ]
+
+    .to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# CREATE EVALUATION SUMMARY
+
+# ============================================================
+
+
+
+evaluation_summary = pd.DataFrame(
+
+    {
+
+        "metric": [
+
+            "Validation Start",
+
+            "Validation End",
+
+            "Validation Horizon Days",
+
+            "Store-SKU Combinations",
+
+            "Actual Total Units",
+
+            "Baseline MAE",
+
+            "Baseline RMSE",
+
+            "Baseline Bias",
+
+            "Baseline WAPE %",
+
+            "Intermittent MAE",
+
+            "Intermittent RMSE",
+
+            "Intermittent Bias",
+
+            "Intermittent WAPE %",
+
+            "Recommended MAE",
+
+            "Recommended RMSE",
+
+            "Recommended Bias",
+
+            "Recommended WAPE %",
+
+            "Baseline Wins",
+
+            "Intermittent Wins",
+
+            "Ties",
+
+            "Overall Winner"
+
+        ],
+
+
+
+        "value": [
+
+            VALIDATION_START.date(),
+
+            VALIDATION_END.date(),
+
+            VALIDATION_DAYS,
+
+            len(evaluation),
+
+            evaluation[
+
+                "actual_units_30d"
+
+            ].sum(),
+
+
+
+            baseline_metrics["MAE"],
+
+            baseline_metrics["RMSE"],
+
+            baseline_metrics["Bias"],
+
+            baseline_metrics["WAPE_pct"],
+
+
+
+            intermittent_metrics["MAE"],
+
+            intermittent_metrics["RMSE"],
+
+            intermittent_metrics["Bias"],
+
+            intermittent_metrics["WAPE_pct"],
+
+
+
+            recommended_metrics["MAE"],
+
+            recommended_metrics["RMSE"],
+
+            recommended_metrics["Bias"],
+
+            recommended_metrics["WAPE_pct"],
+
+
+
+            baseline_wins,
+
+            intermittent_wins,
+
+            ties,
+
+
+
+            overall_winner
+
+        ]
+
+    }
+
+)
+
+
+
+
+
+# ============================================================
+
+# SAVE MODEL METRICS
+
+# ============================================================
+
+
+
+metrics_output = (
+
+    OUTPUT_PATH /
+
+    "forecast_model_metrics.csv"
+
+)
+
+
+
+
+
+metrics.to_csv(
+
+    metrics_output,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# SAVE ACTIVE METRICS
+
+# ============================================================
+
+
+
+if not active_metrics.empty:
+
+
+
+    active_metrics_output = (
+
+        OUTPUT_PATH /
+
+        "forecast_active_demand_metrics.csv"
+
+    )
+
+
+
+    active_metrics.to_csv(
+
+        active_metrics_output,
+
+        index=False
+
+    )
+
+
+
+
+
+# ============================================================
+
+# SAVE EVALUATION SUMMARY
+
+# ============================================================
+
+
+
+summary_output = (
+
+    OUTPUT_PATH /
+
+    "forecast_evaluation_summary.csv"
+
+)
+
+
+
+
+
+evaluation_summary.to_csv(
+
+    summary_output,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# SAVE STORE-SKU EVALUATION
+
+# ============================================================
+
+
+
+store_sku_output = (
+
+    OUTPUT_PATH /
+
+    "store_sku_forecast_evaluation.csv"
+
+)
+
+
+
+
+
+evaluation.to_csv(
+
+    store_sku_output,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# FINAL VALIDATION
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("FINAL VALIDATION")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nEvaluation shape:",
+
+    evaluation.shape
+
+)
+
+
+
+
+
+print(
+
+    "Missing actual demand:",
+
+    evaluation[
+
+        "actual_units_30d"
+
+    ].isna().sum()
+
+)
+
+
+
+
+
+print(
+
+    "Missing baseline forecasts:",
+
+    evaluation[
+
+        "baseline_forecast"
+
+    ].isna().sum()
+
+)
+
+
+
+
+
+print(
+
+    "Missing intermittent forecasts:",
+
+    evaluation[
+
+        "intermittent_forecast_30d"
+
+    ].isna().sum()
+
+)
+
+
+
+
+
+print(
+
+    "Missing recommended forecasts:",
+
+    evaluation[
+
+        "recommended_forecast"
+
+    ].isna().sum()
+
+)
+
+
+
+
+
+print(
+
+    "Negative baseline forecasts:",
+
+    (
+
+        evaluation[
+
+            "baseline_forecast"
+
+        ] < 0
+
+    ).sum()
+
+)
+
+
+
+
+
+print(
+
+    "Negative intermittent forecasts:",
+
+    (
+
+        evaluation[
+
+            "intermittent_forecast_30d"
+
+        ] < 0
+
+    ).sum()
+
+)
+
+
+
+
+
+# ============================================================
+
+# FINAL OUTPUT
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("PHASE 5.4 COMPLETED SUCCESSFULLY")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nModel metrics saved to:"
+
+)
+
+
+
+print(
+
+    metrics_output
+
+)
+
+
+
+
+
+print(
+
+    "\nEvaluation summary saved to:"
+
+)
+
+
+
+print(
+
+    summary_output
+
+)
+
+
+
+
+
+print(
+
+    "\nStore-SKU evaluation saved to:"
+
+)
+
+
+
+print(
+
+    store_sku_output
+
+)
+
+
+
+
+
+if not active_metrics.empty:
+
+
+
+    print(
+
+        "\nActive-demand metrics saved to:"
+
+    )
+
+
+
+    print(
+
+        active_metrics_output
+
+    )
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("NEXT PHASE: FORECAST SELECTION & BUSINESS RECOMMENDATIONS")
+
+print("=" * 70)
+
+
+
+
+
+model_validation.py -->
+
+import os
+
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+
+
+from sklearn.metrics import (
+
+    mean_absolute_error,
+
+    mean_squared_error
+
+)
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - MODEL VALIDATION")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. PATHS
+
+# ============================================================
+
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+
+FORECAST_DIR = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting"
+
+)
+
+
+
+VALIDATION_DIR = os.path.join(
+
+    FORECAST_DIR,
+
+    "validation"
+
+)
+
+
+
+os.makedirs(VALIDATION_DIR, exist_ok=True)
+
+
+
+
+
+# ============================================================
+
+# 2. LOAD ADVANCED FORECAST RESULTS
+
+# ============================================================
+
+
+
+print("\nLoading advanced forecast results...")
+
+
+
+forecast_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "advanced_model_forecasts.csv"
+
+)
+
+
+
+df = pd.read_csv(forecast_file)
+
+
+
+df["date"] = pd.to_datetime(df["date"])
+
+
+
+print("Dataset loaded successfully!")
+
+print("Shape:", df.shape)
+
+
+
+
+
+# ============================================================
+
+# 3. CHECK REQUIRED COLUMNS
+
+# ============================================================
+
+
+
+required_columns = [
+
+    "date",
+
+    "units_sold",
+
+    "rf_forecast",
+
+    "xgb_forecast",
+
+    "lgb_forecast"
+
+]
+
+
+
+missing_columns = [
+
+    col for col in required_columns
+
+    if col not in df.columns
+
+]
+
+
+
+if missing_columns:
+
+
+
+    raise ValueError(
+
+        f"Missing required columns: {missing_columns}"
+
+    )
+
+
+
+
+
+# ============================================================
+
+# 4. CALCULATE ERRORS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("CALCULATING MODEL ERRORS")
+
+print("=" * 70)
+
+
+
+
+
+df["rf_error"] = (
+
+    df["units_sold"] - df["rf_forecast"]
+
+)
+
+
+
+df["xgb_error"] = (
+
+    df["units_sold"] - df["xgb_forecast"]
+
+)
+
+
+
+df["lgb_error"] = (
+
+    df["units_sold"] - df["lgb_forecast"]
+
+)
+
+
+
+
+
+df["rf_abs_error"] = abs(df["rf_error"])
+
+
+
+df["xgb_abs_error"] = abs(df["xgb_error"])
+
+
+
+df["lgb_abs_error"] = abs(df["lgb_error"])
+
+
+
+
+
+df["lgb_pct_error"] = (
+
+    abs(df["lgb_error"])
+
+    / df["units_sold"].replace(0, np.nan)
+
+) * 100
+
+
+
+
+
+# ============================================================
+
+# 5. VALIDATION METRICS
+
+# ============================================================
+
+
+
+def calculate_metrics(actual, predicted):
+
+
+
+    mae = mean_absolute_error(
+
+        actual,
+
+        predicted
+
+    )
+
+
+
+    rmse = np.sqrt(
+
+        mean_squared_error(
+
+            actual,
+
+            predicted
+
+        )
+
+    )
+
+
+
+    non_zero = actual != 0
+
+
+
+    mape = np.mean(
+
+        np.abs(
+
+            (
+
+                actual[non_zero]
+
+                - predicted[non_zero]
+
+            )
+
+            / actual[non_zero]
+
+        )
+
+    ) * 100
+
+
+
+    wape = (
+
+        np.sum(
+
+            np.abs(
+
+                actual - predicted
+
+            )
+
+        )
+
+        /
+
+        np.sum(
+
+            np.abs(actual)
+
+        )
+
+    ) * 100
+
+
+
+    return mae, rmse, mape, wape
+
+
+
+
+
+actual = df["units_sold"]
+
+
+
+
+
+rf_metrics = calculate_metrics(
+
+    actual,
+
+    df["rf_forecast"]
+
+)
+
+
+
+xgb_metrics = calculate_metrics(
+
+    actual,
+
+    df["xgb_forecast"]
+
+)
+
+
+
+lgb_metrics = calculate_metrics(
+
+    actual,
+
+    df["lgb_forecast"]
+
+)
+
+
+
+
+
+validation_results = pd.DataFrame({
+
+
+
+    "model": [
+
+        "Random Forest",
+
+        "XGBoost",
+
+        "LightGBM"
+
+    ],
+
+
+
+    "MAE": [
+
+        rf_metrics[0],
+
+        xgb_metrics[0],
+
+        lgb_metrics[0]
+
+    ],
+
+
+
+    "RMSE": [
+
+        rf_metrics[1],
+
+        xgb_metrics[1],
+
+        lgb_metrics[1]
+
+    ],
+
+
+
+    "MAPE": [
+
+        rf_metrics[2],
+
+        xgb_metrics[2],
+
+        lgb_metrics[2]
+
+    ],
+
+
+
+    "WAPE": [
+
+        rf_metrics[3],
+
+        xgb_metrics[3],
+
+        lgb_metrics[3]
+
+    ]
+
+
+
+})
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("VALIDATION METRICS")
+
+print("=" * 70)
+
+
+
+print(
+
+    validation_results.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 6. BEST MODEL
+
+# ============================================================
+
+
+
+best_model = validation_results.loc[
+
+    validation_results["MAE"].idxmin()
+
+]
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST VALIDATED MODEL")
+
+print("=" * 70)
+
+
+
+print(
+
+    "Model:",
+
+    best_model["model"]
+
+)
+
+
+
+print(
+
+    "MAE:",
+
+    round(best_model["MAE"], 2)
+
+)
+
+
+
+print(
+
+    "RMSE:",
+
+    round(best_model["RMSE"], 2)
+
+)
+
+
+
+print(
+
+    "MAPE:",
+
+    round(best_model["MAPE"], 2),
+
+    "%"
+
+)
+
+
+
+print(
+
+    "WAPE:",
+
+    round(best_model["WAPE"], 2),
+
+    "%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 7. LIGHTGBM ERROR ANALYSIS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("LIGHTGBM ERROR ANALYSIS")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nAverage absolute error:",
+
+    round(
+
+        df["lgb_abs_error"].mean(),
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "Maximum absolute error:",
+
+    round(
+
+        df["lgb_abs_error"].max(),
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "Average percentage error:",
+
+    round(
+
+        df["lgb_pct_error"].mean(),
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 8. WORST FORECAST DAYS
+
+# ============================================================
+
+
+
+worst_days = (
+
+    df[
+
+        [
+
+            "date",
+
+            "units_sold",
+
+            "lgb_forecast",
+
+            "lgb_error",
+
+            "lgb_abs_error",
+
+            "lgb_pct_error"
+
+        ]
+
+    ]
+
+    .sort_values(
+
+        "lgb_abs_error",
+
+        ascending=False
+
+    )
+
+    .head(20)
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 WORST LIGHTGBM FORECAST DAYS")
+
+print("=" * 70)
+
+
+
+print(
+
+    worst_days.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 9. BEST FORECAST DAYS
+
+# ============================================================
+
+
+
+best_days = (
+
+    df[
+
+        [
+
+            "date",
+
+            "units_sold",
+
+            "lgb_forecast",
+
+            "lgb_error",
+
+            "lgb_abs_error",
+
+            "lgb_pct_error"
+
+        ]
+
+    ]
+
+    .sort_values(
+
+        "lgb_abs_error",
+
+        ascending=True
+
+    )
+
+    .head(20)
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("TOP 20 MOST ACCURATE LIGHTGBM DAYS")
+
+print("=" * 70)
+
+
+
+print(
+
+    best_days.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 10. ACTUAL VS FORECAST
+
+# ============================================================
+
+
+
+plt.figure(figsize=(14, 6))
+
+
+
+plt.plot(
+
+    df["date"],
+
+    df["units_sold"],
+
+    label="Actual Demand"
+
+)
+
+
+
+plt.plot(
+
+    df["date"],
+
+    df["lgb_forecast"],
+
+    label="LightGBM Forecast"
+
+)
+
+
+
+plt.title(
+
+    "Actual vs LightGBM Demand Forecast"
+
+)
+
+
+
+plt.xlabel("Date")
+
+
+
+plt.ylabel("Units Sold")
+
+
+
+plt.legend()
+
+
+
+plt.xticks(rotation=45)
+
+
+
+plt.tight_layout()
+
+
+
+
+
+actual_forecast_plot = os.path.join(
+
+    VALIDATION_DIR,
+
+    "actual_vs_lightgbm.png"
+
+)
+
+
+
+plt.savefig(
+
+    actual_forecast_plot,
+
+    dpi=150
+
+)
+
+
+
+plt.close()
+
+
+
+
+
+# ============================================================
+
+# 11. FORECAST ERROR DISTRIBUTION
+
+# ============================================================
+
+
+
+plt.figure(figsize=(10, 6))
+
+
+
+plt.hist(
+
+    df["lgb_error"],
+
+    bins=30
+
+)
+
+
+
+plt.axvline(
+
+    0,
+
+    linestyle="--"
+
+)
+
+
+
+plt.title(
+
+    "LightGBM Forecast Error Distribution"
+
+)
+
+
+
+plt.xlabel(
+
+    "Forecast Error"
+
+)
+
+
+
+plt.ylabel(
+
+    "Frequency"
+
+)
+
+
+
+plt.tight_layout()
+
+
+
+
+
+error_plot = os.path.join(
+
+    VALIDATION_DIR,
+
+    "lightgbm_error_distribution.png"
+
+)
+
+
+
+plt.savefig(
+
+    error_plot,
+
+    dpi=150
+
+)
+
+
+
+plt.close()
+
+
+
+
+
+# ============================================================
+
+# 12. ACTUAL VS PREDICTED SCATTER
+
+# ============================================================
+
+
+
+plt.figure(figsize=(8, 8))
+
+
+
+plt.scatter(
+
+    df["units_sold"],
+
+    df["lgb_forecast"],
+
+    alpha=0.5
+
+)
+
+
+
+min_value = min(
+
+    df["units_sold"].min(),
+
+    df["lgb_forecast"].min()
+
+)
+
+
+
+max_value = max(
+
+    df["units_sold"].max(),
+
+    df["lgb_forecast"].max()
+
+)
+
+
+
+plt.plot(
+
+    [min_value, max_value],
+
+    [min_value, max_value],
+
+    linestyle="--"
+
+)
+
+
+
+plt.title(
+
+    "Actual vs Predicted Demand - LightGBM"
+
+)
+
+
+
+plt.xlabel(
+
+    "Actual Units Sold"
+
+)
+
+
+
+plt.ylabel(
+
+    "Predicted Units Sold"
+
+)
+
+
+
+plt.tight_layout()
+
+
+
+
+
+scatter_plot = os.path.join(
+
+    VALIDATION_DIR,
+
+    "actual_vs_predicted_scatter.png"
+
+)
+
+
+
+plt.savefig(
+
+    scatter_plot,
+
+    dpi=150
+
+)
+
+
+
+plt.close()
+
+
+
+
+
+# ============================================================
+
+# 13. SAVE VALIDATION METRICS
+
+# ============================================================
+
+
+
+metrics_file = os.path.join(
+
+    VALIDATION_DIR,
+
+    "validation_metrics.csv"
+
+)
+
+
+
+validation_results.to_csv(
+
+    metrics_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 14. SAVE ERROR ANALYSIS
+
+# ============================================================
+
+
+
+error_file = os.path.join(
+
+    VALIDATION_DIR,
+
+    "prediction_errors.csv"
+
+)
+
+
+
+df.to_csv(
+
+    error_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 15. SAVE WORST DAYS
+
+# ============================================================
+
+
+
+worst_file = os.path.join(
+
+    VALIDATION_DIR,
+
+    "worst_forecast_days.csv"
+
+)
+
+
+
+worst_days.to_csv(
+
+    worst_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 16. FINAL SUMMARY
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("MODEL VALIDATION COMPLETED")
+
+print("=" * 70)
+
+
+
+print("\nValidation files saved to:")
+
+
+
+print(
+
+    VALIDATION_DIR
+
+)
+
+
+
+print("\nGenerated files:")
+
+
+
+print(
+
+    "1. validation_metrics.csv"
+
+)
+
+
+
+print(
+
+    "2. prediction_errors.csv"
+
+)
+
+
+
+print(
+
+    "3. worst_forecast_days.csv"
+
+)
+
+
+
+print(
+
+    "4. actual_vs_lightgbm.png"
+
+)
+
+
+
+print(
+
+    "5. lightgbm_error_distribution.png"
+
+)
+
+
+
+print(
+
+    "6. actual_vs_predicted_scatter.png"
+
+)
+
+
+
+print("\n" + "=" * 70)
+
+
+
+master_model_comparison.py  -->
+
+import os
+
+import pandas as pd
+
+
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - MASTER MODEL COMPARISON")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. PATHS
+
+# ============================================================
+
+
+
+BASE_DIR = os.path.dirname(
+
+    os.path.dirname(
+
+        os.path.abspath(__file__)
+
+    )
+
+)
+
+
+
+FORECAST_DIR = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting"
+
+)
+
+
+
+ARIMA_DIR = os.path.join(
+
+    FORECAST_DIR,
+
+    "arima_sarima"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 2. LOAD MACHINE LEARNING RESULTS
+
+# ============================================================
+
+
+
+print("\nLoading Machine Learning model results...")
+
+
+
+ml_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "advanced_model_comparison.csv"
+
+)
+
+
+
+ml_results = pd.read_csv(
+
+    ml_file
+
+)
+
+
+
+print("\nMachine Learning models:")
+
+
+
+print(
+
+    ml_results.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 3. LOAD TUNED ARIMA / SARIMA RESULTS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("Loading tuned statistical model results...")
+
+print("=" * 70)
+
+
+
+
+
+tuning_file = os.path.join(
+
+    ARIMA_DIR,
+
+    "arima_sarima_tuning_results.csv"
+
+)
+
+
+
+
+
+if not os.path.exists(tuning_file):
+
+
+
+    raise FileNotFoundError(
+
+        f"\nTuning results not found:\n{tuning_file}\n\n"
+
+        "Please run arima_sarima_tuning.py first."
+
+    )
+
+
+
+
+
+tuning_results = pd.read_csv(
+
+    tuning_file
+
+)
+
+
+
+
+
+# ============================================================
+
+# 4. SELECT BEST ARIMA
+
+# ============================================================
+
+
+
+arima_results = tuning_results[
+
+    tuning_results["model"].str.upper() == "ARIMA"
+
+].copy()
+
+
+
+
+
+best_arima = arima_results.loc[
+
+    arima_results["MAE"].idxmin()
+
+]
+
+
+
+
+
+# ============================================================
+
+# 5. SELECT BEST SARIMA
+
+# ============================================================
+
+
+
+sarima_results = tuning_results[
+
+    tuning_results["model"].str.upper() == "SARIMA"
+
+].copy()
+
+
+
+
+
+best_sarima = sarima_results.loc[
+
+    sarima_results["MAE"].idxmin()
+
+]
+
+
+
+
+
+# ============================================================
+
+# 6. CREATE STATISTICAL MODEL TABLE
+
+# ============================================================
+
+
+
+statistical_results = pd.DataFrame({
+
+
+
+    "model": [
+
+        "ARIMA",
+
+        "SARIMA"
+
+    ],
+
+
+
+    "MAE": [
+
+        best_arima["MAE"],
+
+        best_sarima["MAE"]
+
+    ],
+
+
+
+    "RMSE": [
+
+        best_arima["RMSE"],
+
+        best_sarima["RMSE"]
+
+    ],
+
+
+
+    "MAPE": [
+
+        best_arima["MAPE"],
+
+        best_sarima["MAPE"]
+
+    ],
+
+
+
+    "WAPE": [
+
+        best_arima["WAPE"],
+
+        best_sarima["WAPE"]
+
+    ]
+
+
+
+})
+
+
+
+
+
+print("\nStatistical models:")
+
+
+
+print(
+
+    statistical_results.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 7. ADD MODEL TYPE
+
+# ============================================================
+
+
+
+ml_results["model_type"] = "Machine Learning"
+
+
+
+statistical_results["model_type"] = "Statistical"
+
+
+
+
+
+# ============================================================
+
+# 8. COMBINE ALL MODELS
+
+# ============================================================
+
+
+
+master_results = pd.concat(
+
+    [
+
+        ml_results[
+
+            [
+
+                "model",
+
+                "model_type",
+
+                "MAE",
+
+                "RMSE",
+
+                "MAPE",
+
+                "WAPE"
+
+            ]
+
+        ],
+
+
+
+        statistical_results[
+
+            [
+
+                "model",
+
+                "model_type",
+
+                "MAE",
+
+                "RMSE",
+
+                "MAPE",
+
+                "WAPE"
+
+            ]
+
+        ]
+
+    ],
+
+    ignore_index=True
+
+)
+
+
+
+
+
+# ============================================================
+
+# 9. SORT BY MAE
+
+# ============================================================
+
+
+
+master_results = master_results.sort_values(
+
+    "MAE",
+
+    ascending=True
+
+).reset_index(
+
+    drop=True
+
+)
+
+
+
+
+
+master_results.insert(
+
+    0,
+
+    "rank",
+
+    range(
+
+        1,
+
+        len(master_results) + 1
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 10. DISPLAY MASTER COMPARISON
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("MASTER MODEL COMPARISON")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    master_results.round(2).to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 11. BEST OVERALL MODEL
+
+# ============================================================
+
+
+
+best_overall = master_results.iloc[0]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST OVERALL FORECASTING MODEL")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "Model:",
+
+    best_overall["model"]
+
+)
+
+
+
+print(
+
+    "Model Type:",
+
+    best_overall["model_type"]
+
+)
+
+
+
+print(
+
+    "MAE:",
+
+    round(
+
+        best_overall["MAE"],
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "RMSE:",
+
+    round(
+
+        best_overall["RMSE"],
+
+        2
+
+    )
+
+)
+
+
+
+print(
+
+    "MAPE:",
+
+    round(
+
+        best_overall["MAPE"],
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+print(
+
+    "WAPE:",
+
+    round(
+
+        best_overall["WAPE"],
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 12. BEST MACHINE LEARNING MODEL
+
+# ============================================================
+
+
+
+ml_models = master_results[
+
+    master_results["model_type"]
+
+    == "Machine Learning"
+
+]
+
+
+
+
+
+best_ml = ml_models.iloc[0]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST MACHINE LEARNING MODEL")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    f"{best_ml['model']} | "
+
+    f"MAE: {best_ml['MAE']:.2f}"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 13. BEST STATISTICAL MODEL
+
+# ============================================================
+
+
+
+statistical_models = master_results[
+
+    master_results["model_type"]
+
+    == "Statistical"
+
+]
+
+
+
+
+
+best_statistical = statistical_models.iloc[0]
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST STATISTICAL MODEL")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    f"{best_statistical['model']} | "
+
+    f"MAE: {best_statistical['MAE']:.2f}"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 14. TUNED CONFIGURATIONS
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("BEST STATISTICAL MODEL CONFIGURATIONS")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nBest ARIMA configuration:"
+
+)
+
+
+
+print(
+
+    "ARIMA",
+
+    best_arima["order"]
+
+)
+
+
+
+
+
+print(
+
+    "\nBest SARIMA configuration:"
+
+)
+
+
+
+print(
+
+    "SARIMA",
+
+    best_sarima["order"],
+
+    "x",
+
+    best_sarima["seasonal_order"]
+
+)
+
+
+
+
+
+# ============================================================
+
+# 15. PERFORMANCE GAP
+
+# ============================================================
+
+
+
+performance_gap = (
+
+    best_statistical["MAE"]
+
+    -
+
+    best_ml["MAE"]
+
+)
+
+
+
+
+
+improvement_pct = (
+
+    performance_gap
+
+    /
+
+    best_statistical["MAE"]
+
+) * 100
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("ML VS STATISTICAL MODEL PERFORMANCE")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "Best ML MAE:",
+
+    round(
+
+        best_ml["MAE"],
+
+        2
+
+    )
+
+)
+
+
+
+
+
+print(
+
+    "Best Statistical MAE:",
+
+    round(
+
+        best_statistical["MAE"],
+
+        2
+
+    )
+
+)
+
+
+
+
+
+print(
+
+    "MAE Difference:",
+
+    round(
+
+        performance_gap,
+
+        2
+
+    )
+
+)
+
+
+
+
+
+print(
+
+    "ML improvement over best statistical model:",
+
+    round(
+
+        improvement_pct,
+
+        2
+
+    ),
+
+    "%"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 16. SAVE MASTER RESULTS
+
+# ============================================================
+
+
+
+master_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "master_model_comparison.csv"
+
+)
+
+
+
+
+
+master_results.to_csv(
+
+    master_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 17. SAVE BEST MODEL SUMMARY
+
+# ============================================================
+
+
+
+summary = pd.DataFrame({
+
+
+
+    "metric": [
+
+        "best_overall_model",
+
+        "best_overall_model_type",
+
+        "best_ml_model",
+
+        "best_statistical_model",
+
+        "best_arima_order",
+
+        "best_sarima_order",
+
+        "best_sarima_seasonal_order"
+
+    ],
+
+
+
+    "value": [
+
+        best_overall["model"],
+
+        best_overall["model_type"],
+
+        best_ml["model"],
+
+        best_statistical["model"],
+
+        best_arima["order"],
+
+        best_sarima["order"],
+
+        best_sarima["seasonal_order"]
+
+    ]
+
+
+
+})
+
+
+
+
+
+summary_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "best_model_summary.csv"
+
+)
+
+
+
+
+
+summary.to_csv(
+
+    summary_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 18. FINAL SUMMARY
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("MASTER MODEL COMPARISON COMPLETED")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "\nBest Overall Model:",
+
+    best_overall["model"]
+
+)
+
+
+
+
+
+print(
+
+    "Best ML Model:",
+
+    best_ml["model"]
+
+)
+
+
+
+
+
+print(
+
+    "Best Statistical Model:",
+
+    best_statistical["model"]
+
+)
+
+
+
+
+
+print("\nFiles saved:")
+
+
+
+print(
+
+    master_file
+
+)
+
+
+
+print(
+
+    summary_file
+
+)
+
+
+
+print("\n" + "=" * 70)
+
+
+
+future_forecast.py  -->
+
+
+
+import os
+
+import warnings
+
+import pandas as pd
+
+import numpy as np
+
+
+
+from lightgbm import LGBMRegressor
+
+
+
+
+
+warnings.filterwarnings("ignore")
+
+
+
+
+
+print("=" * 70)
+
+print("PROJECT FORESIGHT - FUTURE DEMAND FORECASTING")
+
+print("=" * 70)
+
+
+
+
+
+# ============================================================
+
+# 1. PATHS
+
+# ============================================================
+
+
+
+BASE_DIR = os.path.dirname(
+
+    os.path.dirname(
+
+        os.path.abspath(__file__)
+
+    )
+
+)
+
+
+
+FORECAST_DIR = os.path.join(
+
+    BASE_DIR,
+
+    "data",
+
+    "processed",
+
+    "forecasting"
+
+)
+
+
+
+OUTPUT_DIR = os.path.join(
+
+    FORECAST_DIR,
+
+    "future"
+
+)
+
+
+
+os.makedirs(
+
+    OUTPUT_DIR,
+
+    exist_ok=True
+
+)
+
+
+
+
+
+# ============================================================
+
+# 2. LOAD FORECASTING DATASET
+
+# ============================================================
+
+
+
+print("\nLoading forecasting dataset...")
+
+
+
+input_file = os.path.join(
+
+    FORECAST_DIR,
+
+    "daily_forecasting_dataset.csv"
+
+)
+
+
+
+df = pd.read_csv(input_file)
+
+
+
+df["date"] = pd.to_datetime(
+
+    df["date"]
+
+)
+
+
+
+df = df.sort_values(
+
+    "date"
+
+).reset_index(drop=True)
+
+
+
+print("Dataset loaded successfully!")
+
+print("Shape:", df.shape)
+
+
+
+print(
+
+    "Historical period:",
+
+    df["date"].min(),
+
+    "to",
+
+    df["date"].max()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 3. CREATE ADVANCED FEATURES
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("CREATING ADVANCED FEATURES")
+
+print("=" * 70)
+
+
+
+
+
+def create_features(data):
+
+
+
+    data = data.copy()
+
+
+
+    # --------------------------------------------------------
+
+    # Calendar features
+
+    # --------------------------------------------------------
+
+
+
+    data["year"] = data["date"].dt.year
+
+
+
+    data["month"] = data["date"].dt.month
+
+
+
+    data["quarter"] = data["date"].dt.quarter
+
+
+
+    data["day_of_week"] = data["date"].dt.dayofweek
+
+
+
+    data["day_of_month"] = data["date"].dt.day
+
+
+
+    data["week_of_year"] = (
+
+        data["date"].dt.isocalendar().week.astype(int)
+
+    )
+
+
+
+    data["is_weekend"] = (
+
+        data["day_of_week"] >= 5
+
+    ).astype(int)
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Trend
+
+    # --------------------------------------------------------
+
+
+
+    data["trend"] = (
+
+        np.arange(len(data))
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Cyclical features
+
+    # --------------------------------------------------------
+
+
+
+    data["month_sin"] = np.sin(
+
+        2 * np.pi * data["month"] / 12
+
+    )
+
+
+
+    data["month_cos"] = np.cos(
+
+        2 * np.pi * data["month"] / 12
+
+    )
+
+
+
+    data["day_of_week_sin"] = np.sin(
+
+        2 * np.pi * data["day_of_week"] / 7
+
+    )
+
+
+
+    data["day_of_week_cos"] = np.cos(
+
+        2 * np.pi * data["day_of_week"] / 7
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Lag features
+
+    # --------------------------------------------------------
+
+
+
+    data["lag_1"] = (
+
+        data["units_sold"].shift(1)
+
+    )
+
+
+
+    data["lag_2"] = (
+
+        data["units_sold"].shift(2)
+
+    )
+
+
+
+    data["lag_3"] = (
+
+        data["units_sold"].shift(3)
+
+    )
+
+
+
+    data["lag_7"] = (
+
+        data["units_sold"].shift(7)
+
+    )
+
+
+
+    data["lag_14"] = (
+
+        data["units_sold"].shift(14)
+
+    )
+
+
+
+    data["lag_21"] = (
+
+        data["units_sold"].shift(21)
+
+    )
+
+
+
+    data["lag_28"] = (
+
+        data["units_sold"].shift(28)
+
+    )
+
+
+
+    data["lag_56"] = (
+
+        data["units_sold"].shift(56)
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Rolling demand features
+
+    # --------------------------------------------------------
+
+
+
+    data["rolling_mean_7"] = (
+
+        data["units_sold"]
+
+        .rolling(7)
+
+        .mean()
+
+    )
+
+
+
+    data["rolling_mean_14"] = (
+
+        data["units_sold"]
+
+        .rolling(14)
+
+        .mean()
+
+    )
+
+
+
+    data["rolling_mean_28"] = (
+
+        data["units_sold"]
+
+        .rolling(28)
+
+        .mean()
+
+    )
+
+
+
+    data["rolling_mean_56"] = (
+
+        data["units_sold"]
+
+        .rolling(56)
+
+        .mean()
+
+    )
+
+
+
+
+
+    data["rolling_std_7"] = (
+
+        data["units_sold"]
+
+        .rolling(7)
+
+        .std()
+
+    )
+
+
+
+    data["rolling_std_14"] = (
+
+        data["units_sold"]
+
+        .rolling(14)
+
+        .std()
+
+    )
+
+
+
+    data["rolling_std_28"] = (
+
+        data["units_sold"]
+
+        .rolling(28)
+
+        .std()
+
+    )
+
+
+
+
+
+    return data
+
+
+
+
+
+feature_df = create_features(df)
+
+
+
+print("Advanced features created.")
+
+
+
+
+
+# ============================================================
+
+# 4. MODEL FEATURES
+
+# ============================================================
+
+
+
+features = [
+
+
+
+    "avg_discount",
+
+    "promotion_flag",
+
+
+
+    "year",
+
+    "month",
+
+    "quarter",
+
+    "day_of_week",
+
+    "day_of_month",
+
+    "week_of_year",
+
+    "is_weekend",
+
+
+
+    "trend",
+
+
+
+    "month_sin",
+
+    "month_cos",
+
+
+
+    "day_of_week_sin",
+
+    "day_of_week_cos",
+
+
+
+    "lag_1",
+
+    "lag_2",
+
+    "lag_3",
+
+    "lag_7",
+
+    "lag_14",
+
+    "lag_21",
+
+    "lag_28",
+
+    "lag_56",
+
+
+
+    "rolling_mean_7",
+
+    "rolling_mean_14",
+
+    "rolling_mean_28",
+
+    "rolling_mean_56",
+
+
+
+    "rolling_std_7",
+
+    "rolling_std_14",
+
+    "rolling_std_28"
+
+]
+
+
+
+
+
+print("\nNumber of features:", len(features))
+
+
+
+
+
+# ============================================================
+
+# 5. REMOVE INITIAL MISSING ROWS
+
+# ============================================================
+
+
+
+model_data = feature_df.dropna(
+
+    subset=features + ["units_sold"]
+
+).copy()
+
+
+
+print(
+
+    "Training rows:",
+
+    len(model_data)
+
+)
+
+
+
+
+
+# ============================================================
+
+# 6. TRAIN FINAL LIGHTGBM MODEL
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("TRAINING FINAL LIGHTGBM MODEL")
+
+print("=" * 70)
+
+
+
+
+
+X_train = model_data[
+
+    features
+
+]
+
+
+
+y_train = model_data[
+
+    "units_sold"
+
+]
+
+
+
+
+
+final_model = LGBMRegressor(
+
+
+
+    objective="regression",
+
+
+
+    n_estimators=500,
+
+
+
+    learning_rate=0.03,
+
+
+
+    num_leaves=31,
+
+
+
+    max_depth=-1,
+
+
+
+    subsample=0.8,
+
+
+
+    colsample_bytree=0.8,
+
+
+
+    random_state=42,
+
+
+
+    verbosity=-1
+
+)
+
+
+
+
+
+final_model.fit(
+
+    X_train,
+
+    y_train
+
+)
+
+
+
+
+
+print(
+
+    "Final LightGBM model trained successfully!"
+
+)
+
+
+
+
+
+# ============================================================
+
+# 7. FORECAST HORIZON
+
+# ============================================================
+
+
+
+FORECAST_DAYS = 30
+
+
+
+last_date = df["date"].max()
+
+
+
+future_dates = pd.date_range(
+
+
+
+    start=last_date + pd.Timedelta(days=1),
+
+
+
+    periods=FORECAST_DAYS,
+
+
+
+    freq="D"
+
+)
+
+
+
+
+
+print("\n" + "=" * 70)
+
+print("FUTURE FORECAST PERIOD")
+
+print("=" * 70)
+
+
+
+print(
+
+    "Start:",
+
+    future_dates.min()
+
+)
+
+
+
+print(
+
+    "End:",
+
+    future_dates.max()
+
+)
+
+
+
+print(
+
+    "Forecast days:",
+
+    len(future_dates)
+
+)
+
+
+
+
+
+# ============================================================
+
+# 8. PREPARE RECURSIVE FORECAST DATA
+
+# ============================================================
+
+
+
+history = df[
+
+    [
+
+        "date",
+
+        "units_sold",
+
+        "avg_discount",
+
+        "promotion_flag"
+
+    ]
+
+].copy()
+
+
+
+
+
+# ------------------------------------------------------------
+
+# Use recent historical discount/promotion patterns
+
+# ------------------------------------------------------------
+
+
+
+recent_discount = (
+
+    history["avg_discount"]
+
+    .tail(28)
+
+    .mean()
+
+)
+
+
+
+recent_promotion_rate = (
+
+    history["promotion_flag"]
+
+    .tail(28)
+
+    .mean()
+
+)
+
+
+
+
+
+print("\nRecent average discount:",
+
+      round(recent_discount, 2))
+
+
+
+print(
+
+    "Recent promotion rate:",
+
+    round(recent_promotion_rate, 2)
+
+)
+
+
+
+
+
+# ============================================================
+
+# 9. RECURSIVE FUTURE FORECAST
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("GENERATING FUTURE FORECAST")
+
+print("=" * 70)
+
+
+
+
+
+future_results = []
+
+
+
+
+
+for future_date in future_dates:
+
+
+
+    # --------------------------------------------------------
+
+    # Assume future discount based on recent average
+
+    # --------------------------------------------------------
+
+
+
+    future_discount = recent_discount
+
+
+
+    # --------------------------------------------------------
+
+    # Assume future promotion based on recent pattern
+
+    # --------------------------------------------------------
+
+
+
+    future_promotion = int(
+
+        round(recent_promotion_rate)
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Add temporary future row
+
+    # --------------------------------------------------------
+
+
+
+    new_row = pd.DataFrame({
+
+
+
+        "date": [
+
+            future_date
+
+        ],
+
+
+
+        "units_sold": [
+
+            np.nan
+
+        ],
+
+
+
+        "avg_discount": [
+
+            future_discount
+
+        ],
+
+
+
+        "promotion_flag": [
+
+            future_promotion
+
+        ]
+
+    })
+
+
+
+
+
+    temp = pd.concat(
+
+        [
+
+            history,
+
+            new_row
+
+        ],
+
+        ignore_index=True
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Create features
+
+    # --------------------------------------------------------
+
+
+
+    temp_features = create_features(
+
+        temp
+
+    )
+
+
+
+
+
+    current_features = (
+
+        temp_features
+
+        .iloc[-1:]
+
+        [features]
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Forecast
+
+    # --------------------------------------------------------
+
+
+
+    prediction = final_model.predict(
+
+        current_features
+
+    )[0]
+
+
+
+
+
+    # Prevent negative demand
+
+    prediction = max(
+
+        0,
+
+        prediction
+
+    )
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Store prediction
+
+    # --------------------------------------------------------
+
+
+
+    future_results.append({
+
+
+
+        "date": future_date,
+
+
+
+        "forecast_units": prediction,
+
+
+
+        "avg_discount": future_discount,
+
+
+
+        "promotion_flag": future_promotion
+
+    })
+
+
+
+
+
+    # --------------------------------------------------------
+
+    # Add prediction to history
+
+    # --------------------------------------------------------
+
+
+
+    history = pd.concat(
+
+
+
+        [
+
+            history,
+
+
+
+            pd.DataFrame({
+
+
+
+                "date": [
+
+                    future_date
+
+                ],
+
+
+
+                "units_sold": [
+
+                    prediction
+
+                ],
+
+
+
+                "avg_discount": [
+
+                    future_discount
+
+                ],
+
+
+
+                "promotion_flag": [
+
+                    future_promotion
+
+                ]
+
+            })
+
+        ],
+
+
+
+        ignore_index=True
+
+    )
+
+
+
+
+
+# ============================================================
+
+# 10. CREATE FORECAST DATAFRAME
+
+# ============================================================
+
+
+
+future_forecast = pd.DataFrame(
+
+    future_results
+
+)
+
+
+
+
+
+# ============================================================
+
+# 11. DEMAND LEVEL
+
+# ============================================================
+
+
+
+historical_mean = (
+
+    df["units_sold"]
+
+    .mean()
+
+)
+
+
+
+historical_std = (
+
+    df["units_sold"]
+
+    .std()
+
+)
+
+
+
+
+
+high_threshold = (
+
+    historical_mean
+
+    + 0.5 * historical_std
+
+)
+
+
+
+low_threshold = (
+
+    historical_mean
+
+    - 0.5 * historical_std
+
+)
+
+
+
+
+
+def demand_level(value):
+
+
+
+    if value >= high_threshold:
+
+        return "High Demand"
+
+
+
+    elif value <= low_threshold:
+
+        return "Low Demand"
+
+
+
+    else:
+
+        return "Normal Demand"
+
+
+
+
+
+future_forecast[
+
+    "demand_level"
+
+] = future_forecast[
+
+    "forecast_units"
+
+].apply(
+
+    demand_level
+
+)
+
+
+
+
+
+# ============================================================
+
+# 12. DEMAND RISK
+
+# ============================================================
+
+
+
+def demand_risk(level):
+
+
+
+    if level == "High Demand":
+
+        return "High"
+
+
+
+    elif level == "Low Demand":
+
+        return "Low"
+
+
+
+    else:
+
+        return "Medium"
+
+
+
+
+
+future_forecast[
+
+    "demand_risk"
+
+] = future_forecast[
+
+    "demand_level"
+
+].apply(
+
+    demand_risk
+
+)
+
+
+
+
+
+# ============================================================
+
+# 13. ROUND FORECAST
+
+# ============================================================
+
+
+
+future_forecast[
+
+    "forecast_units"
+
+] = future_forecast[
+
+    "forecast_units"
+
+].round(0)
+
+
+
+
+
+future_forecast[
+
+    "avg_discount"
+
+] = future_forecast[
+
+    "avg_discount"
+
+].round(2)
+
+
+
+
+
+# ============================================================
+
+# 14. PRINT FORECAST
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("30-DAY FUTURE DEMAND FORECAST")
+
+print("=" * 70)
+
+
+
+print(
+
+    future_forecast.to_string(
+
+        index=False
+
+    )
+
+)
+
+
+
+
+
+# ============================================================
+
+# 15. FORECAST SUMMARY
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("FORECAST SUMMARY")
+
+print("=" * 70)
+
+
+
+
+
+print(
+
+    "Average forecast demand:",
+
+    round(
+
+        future_forecast[
+
+            "forecast_units"
+
+        ].mean(),
+
+        2
+
+    )
+
+)
+
+
+
+
+
+print(
+
+    "Maximum forecast demand:",
+
+    round(
+
+        future_forecast[
+
+            "forecast_units"
+
+        ].max(),
+
+        2
+
+    )
+
+)
+
+
+
+
+
+print(
+
+    "Minimum forecast demand:",
+
+    round(
+
+        future_forecast[
+
+            "forecast_units"
+
+        ].min(),
+
+        2
+
+    )
+
+)
+
+
+
+
+
+print("\nDemand level distribution:")
+
+
+
+print(
+
+    future_forecast[
+
+        "demand_level"
+
+    ].value_counts()
+
+)
+
+
+
+
+
+# ============================================================
+
+# 16. SAVE FUTURE FORECAST
+
+# ============================================================
+
+
+
+forecast_file = os.path.join(
+
+    OUTPUT_DIR,
+
+    "future_30_day_forecast.csv"
+
+)
+
+
+
+
+
+future_forecast.to_csv(
+
+    forecast_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 17. HIGH DEMAND DAYS
+
+# ============================================================
+
+
+
+high_demand_days = (
+
+    future_forecast[
+
+        future_forecast[
+
+            "demand_level"
+
+        ] == "High Demand"
+
+    ]
+
+)
+
+
+
+
+
+high_demand_file = os.path.join(
+
+    OUTPUT_DIR,
+
+    "high_demand_days.csv"
+
+)
+
+
+
+
+
+high_demand_days.to_csv(
+
+    high_demand_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 18. LOW DEMAND DAYS
+
+# ============================================================
+
+
+
+low_demand_days = (
+
+    future_forecast[
+
+        future_forecast[
+
+            "demand_level"
+
+        ] == "Low Demand"
+
+    ]
+
+)
+
+
+
+
+
+low_demand_file = os.path.join(
+
+    OUTPUT_DIR,
+
+    "low_demand_days.csv"
+
+)
+
+
+
+
+
+low_demand_days.to_csv(
+
+    low_demand_file,
+
+    index=False
+
+)
+
+
+
+
+
+# ============================================================
+
+# 19. FINAL SUMMARY
+
+# ============================================================
+
+
+
+print("\n" + "=" * 70)
+
+print("FUTURE FORECASTING COMPLETED")
+
+print("=" * 70)
+
+
+
+print("\nFiles saved to:")
+
+
+
+print(
+
+    OUTPUT_DIR
+
+)
+
+
+
+print("\nGenerated files:")
+
+
+
+print(
+
+    "1. future_30_day_forecast.csv"
+
+)
+
+
+
+print(
+
+    "2. high_demand_days.csv"
+
+)
+
+
+
+print(
+
+    "3. low_demand_days.csv"
+
+)
+
+
+
+print("\n" + "=" * 70)
+
