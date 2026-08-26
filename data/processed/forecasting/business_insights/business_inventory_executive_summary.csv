@@ -1,0 +1,20 @@
+metric,value
+Total Store-SKU combinations,8735.0
+Total stock on hand,1491623.0
+Calibrated 30-day forecast,13108.98857299532
+Calibrated 60-day forecast,28313.655903068342
+Calibrated 90-day forecast,60603.19855965551
+Planning 30-day demand,15288.496571898586
+Planning 60-day demand,30576.99314379717
+Planning 90-day demand,45865.48971569576
+Inventory / 30-day forecast,113.78627662188691
+Inventory / 60-day forecast,52.68210523948457
+Inventory / 90-day forecast,24.612941815797104
+Planning inventory coverage days,2926.9516325268687
+Store-SKU >365 days inventory,8127.0
+Severe overstock Store-SKU,8144.0
+No-forecast Store-SKU,591.0
+Inventory in no-forecast Store-SKU,101131.0
+Suggested reorder quantity,0.0
+Store-SKU requiring reorder,0.0
+Forecast / planning 30-day ratio,0.8574413129078129

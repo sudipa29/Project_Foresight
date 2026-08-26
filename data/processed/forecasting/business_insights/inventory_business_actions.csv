@@ -1,0 +1,7 @@
+priority,action_category,finding,metric,metric_value,affected_store_sku,recommended_action,business_reason
+1,REPLENISHMENT,No additional replenishment is required under the current planning assumptions.,Suggested reorder quantity,0.0,0,PAUSE_NEW_REPLENISHMENT,Current inventory substantially exceeds near-term demand.
+1,OVERSTOCK,Large number of Store-SKU combinations have more than one year of inventory coverage.,Store-SKU >365 DOI,8127.0,8127,STOP_REPLENISHMENT_AND_REVIEW_STOCK,Excess stock creates working-capital and storage-cost pressure.
+1,DORMANT_INVENTORY,Inventory exists for Store-SKU combinations with no current forecast demand.,No-forecast inventory,101131.0,591,REVIEW_DORMANT_STOCK,"Dormant inventory may require transfer, markdown, liquidation, or discontinuation review."
+2,INVENTORY_REBALANCING,Inventory is heavily concentrated relative to forecast demand.,Inventory / 30-day forecast,113.78627662188691,8735,EVALUATE_INTER_STORE_TRANSFER,Inventory may be better allocated across locations based on relative demand.
+2,DEMAND_MONITORING,Planning demand remains higher than the calibrated forecast for the integrated inventory set.,Planning / forecast ratio,1.1662605766087155,8735,MONITOR_DEMAND_AND_REVIEW_FORECAST,Planning assumptions incorporate historical demand and should be monitored against actual sales.
+3,INVENTORY_OPTIMIZATION,Inventory coverage is substantially above near-term demand requirements.,Inventory coverage days,2926.9516325268687,8735,REDUCE_EXCESS_INVENTORY_OVER_TIME,Reducing excess stock can improve working-capital efficiency.

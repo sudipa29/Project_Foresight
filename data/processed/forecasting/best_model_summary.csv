@@ -1,0 +1,8 @@
+metric,value
+best_overall_model,LightGBM
+best_overall_model_type,Machine Learning
+best_ml_model,LightGBM
+best_statistical_model,SARIMA
+best_arima_order,"(3, 0, 0)"
+best_sarima_order,"(2, 0, 0)"
+best_sarima_seasonal_order,"(2, 1, 1, 7)"

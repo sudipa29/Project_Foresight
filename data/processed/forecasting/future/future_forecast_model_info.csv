@@ -1,0 +1,2 @@
+production_model,training_days,training_start,training_end,forecast_horizons,n_estimators,learning_rate,num_leaves,training_rows,store_count,sku_count,store_sku_count
+LightGBM,365,2024-11-01,2025-10-31,"30,60,90",300,0.05,31,3650000,50,200,10000

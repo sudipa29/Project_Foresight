@@ -1,0 +1,7 @@
+insight_id,insight_category,status,key_metric,key_message,recommended_action
+BI001,INVENTORY_POSITION,SEVERE_OVERSTOCK,113.78627662188691,Inventory is substantially higher than near-term forecast demand.,REDUCE_EXCESS_INVENTORY
+BI002,OVERSTOCK,EXCESS_INVENTORY_REVIEW_REQUIRED,8127.0,A very large number of Store-SKU combinations have extreme inventory coverage.,STOP_REPLENISHMENT_REVIEW_STOCK
+BI003,DORMANT_INVENTORY,DORMANT_INVENTORY_REVIEW_REQUIRED,101131.0,Some inventory is held against Store-SKU combinations with no forecast demand.,REVIEW_TRANSFER_MARKDOWN_LIQUIDATION
+BI004,REPLENISHMENT,NO_ADDITIONAL_REPLENISHMENT_REQUIRED,0.0,Current planning assumptions do not support additional replenishment.,PAUSE_NEW_PURCHASES
+BI005,INVENTORY_REBALANCING,REVIEW_REQUIRED,113.78627662188691,Inventory should be evaluated for rebalancing across stores.,EVALUATE_INTER_STORE_TRANSFER
+BI006,FORECAST_PLANNING,MONITOR,0.8574413129078129,Planning demand is based on historical demand plus calibrated forecast and should be monitored against actual sales.,MONITOR_ACTUAL_DEMAND

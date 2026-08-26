@@ -1,0 +1,4 @@
+inventory_coverage_category,store_sku_count,inventory_units,inventory_percentage
+0-30 DAYS,591,101131,6.779930317513205
+181-365 DAYS,17,907,0.060806249300258845
+>365 DAYS,8127,1389585,93.15926343318654

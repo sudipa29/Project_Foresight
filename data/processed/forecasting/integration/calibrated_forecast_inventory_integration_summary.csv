@@ -1,0 +1,18 @@
+metric,value
+Inventory Store-SKU combinations,8735.0
+Forecast Store-SKU combinations,10000.0
+Integrated Store-SKU combinations,8735.0
+Total stock on hand,1491623.0
+Calibrated 30-day forecast,13108.98857299532
+Calibrated 60-day forecast,28313.655903068342
+Calibrated 90-day forecast,60603.19855965551
+Matched Store-SKU,8735.0
+Inventory-only Store-SKU,0.0
+Out of stock,0.0
+Critical,0.0
+Low stock,0.0
+Healthy,0.0
+Overstock,8144.0
+High stockout risk,0.0
+Medium stockout risk,0.0
+Low stockout risk,8144.0
